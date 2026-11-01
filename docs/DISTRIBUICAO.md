@@ -16,4 +16,8 @@ Pacotes gerados a partir do commit `f07382ee3e9ff133001822a05a661e3a7e5e358f`.
 
 Os instaladores e o manifesto SHA256SUMS são distribuídos pela [página de versões](https://github.com/cliqueprojeto/GCP-Drive/releases/tag/v0.3.0-beta.2), fora da árvore de código.
 
+[Publicação verificada](https://github.com/cliqueprojeto/GCP-Drive/actions/runs/41338844682): seis pacotes confrontados com os checksums dos respectivos builds, formatos de arquivo conferidos e manifesto unificado publicado. Os digests SHA-256 dos arquivos servidos pelo GitHub coincidem com os verificados antes do envio.
+
+O atualizador do aplicativo consultou o canal público sem autenticação, identificou beta.2 a partir de beta.1, baixou o instalador Windows e confirmou tamanho e SHA-256, chegando ao estado pronto. Nenhum instalador foi executado por essa verificação.
+
 O empacotamento não comprova montagem, instalação, desempenho cloud nem integração com o gerenciador de arquivos no computador do usuário. Linux/macOS ainda precisam de homologação gráfica real. Não há certificado de distribuição Windows nem assinatura/notarização Apple. Consulte as dependências e limitações no README antes do primeiro teste.
