@@ -1,0 +1,183 @@
+{
+  "name": "gcp-drive",
+  "productName": "GCP-Drive",
+  "version": "0.3.0-beta.2",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "description": "Seu espaço de trabalho, em todas as suas nuvens.",
+  "author": "Bruno Albertini | Gestão Cultural Pro",
+  "homepage": "https://gestaoculturalpro.com.br",
+  "main": "dist/main.cjs",
+  "packageManager": "npm@11.16.0",
+  "engines": {
+    "node": "24.22.1"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "prepare:rclone": "node scripts/prepare-rclone.mjs",
+    "prepare:winfsp": "node scripts/prepare-winfsp.mjs",
+    "test:desktop": "npm run build && node scripts/smoke.mjs",
+    "test:engine": "node scripts/engine-smoke.mjs",
+    "test:auth": "npm run build && node scripts/auth-smoke.mjs",
+    "test:disconnect": "npm run build && node scripts/disconnect-smoke.mjs",
+    "test:sync": "node scripts/sync-smoke.mjs",
+    "start": "electron .",
+    "dev": "npm run build && electron .",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "pack:win": "npm run prepare:winfsp && npm run build && electron-builder --win nsis --x64 --publish never",
+    "pack:linux": "npm run build && electron-builder --linux deb rpm AppImage --x64 --publish never",
+    "pack:mac": "npm run build && electron-builder --mac dmg --x64 --arm64 --publish never"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.1.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "extract-zip": "2.0.1",
+    "playwright-core": "1.64.1",
+    "qrcode": "1.5.4",
+    "typescript": "7.0.2"
+  },
+  "build": {
+    "appId": "br.com.gestaoculturalpro.drive",
+    "productName": "GCP-Drive",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/icon.png",
+      "assets/icon.ico",
+      "assets/pix-qr.svg",
+      "assets/gcp-drive-file-manager.py",
+      "assets/auth-complete.html",
+      "assets/tray-*.png",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json",
+      "LICENSE"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/${platform}-${arch}",
+        "to": "rclone",
+        "filter": [
+          "rclone",
+          "rclone.exe",
+          "LICENSE*",
+          "SHA256SUMS",
+          "provenance.json"
+        ]
+      }
+    ],
+    "beforePack": "scripts/pack-check.mjs",
+    "protocols": [
+      {
+        "name": "GCP-Drive",
+        "schemes": [
+          "gcp-drive"
+        ]
+      }
+    ],
+    "win": {
+      "extraResources": [
+        {
+          "from": "vendor/win32-x64/winfsp.msi",
+          "to": "support/winfsp.msi"
+        },
+        {
+          "from": "vendor/win32-x64/winfsp-provenance.json",
+          "to": "support/winfsp-provenance.json"
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "GCP-Drive-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "installerHeader": "assets/installer-header.bmp",
+      "installerSidebar": "assets/installer-sidebar.bmp",
+      "uninstallerSidebar": "assets/installer-sidebar.bmp",
+      "include": "assets/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GCP-Drive",
+      "installerLanguages": [
+        "pt_BR",
+        "en_US",
+        "es_ES"
+      ],
+      "language": "1046"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [
+        "deb",
+        "rpm",
+        "AppImage"
+      ],
+      "category": "Network",
+      "maintainer": "Gestão Cultural Pro",
+      "desktop": {
+        "entry": {
+          "Name": "GCP-Drive",
+          "Comment": "Suas nuvens, no seu computador"
+        }
+      },
+      "artifactName": "GCP-Drive-${version}-linux-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "fuse3 | fuse",
+        "libfuse3-3 | libfuse2"
+      ]
+    },
+    "rpm": {
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "libXScrnSaver",
+        "(libXtst or libXtst6)",
+        "xdg-utils",
+        "at-spi2-core",
+        "(libuuid or libuuid1)",
+        "fuse3",
+        "libsecret"
+      ]
+    },
+    "mac": {
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ],
+      "hardenedRuntime": true,
+      "artifactName": "GCP-Drive-${version}-macOS-${arch}.${ext}"
+    }
+  }
+}

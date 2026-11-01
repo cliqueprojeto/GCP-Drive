@@ -1,0 +1,12 @@
+{
+  "name": "Roxo Cultural",
+  "mode": "dark",
+  "colors": {
+    "background": "#171221",
+    "surface": "#271e36",
+    "text": "#f5efff",
+    "muted": "#baafcc",
+    "accent": "#c0a2ff",
+    "border": "#483558"
+  }
+}

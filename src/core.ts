@@ -1,0 +1,169 @@
+import {UserError,userMessage} from './user-error.ts';
+import path from "node:path";
+import type { Account, Entry, Provider } from "./contracts.ts";
+import {providers} from './providers.ts';
+export function provider(value: unknown): Provider {
+  if (typeof value!=='string'||!Object.hasOwn(providers,value))
+    throw new UserError("Provedor inválido.");
+  return value as Provider;
+}
+export function relativePath(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.includes("\0") ||
+    value.includes("\\") ||
+    value.startsWith("/") ||
+    value.split("/").some((p) => p === ".." || p === ".") ||
+    /[\x00-\x1f]/u.test(value)
+  )
+    throw new UserError("Caminho inválido.");
+  return value;
+}
+export function withinMount(root: string, value: unknown): string {
+  const target = path.resolve(root, relativePath(value));
+  const relative = path.relative(root, target);
+  if (
+    relative.startsWith(".." + path.sep) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  )
+    throw new UserError("Caminho fora da unidade.");
+  return target;
+}
+export function mountArgs(
+  account: Account,
+  mount: string,
+  cache: string,
+  remote = `${account.id}:`,
+): string[] {
+  return [
+    "mount",
+    remote,
+    mount,
+    "--vfs-cache-mode",
+    "full",
+    "--cache-dir",
+    path.join(cache, account.id),
+    "--vfs-cache-max-size",
+    "5G",
+    "--vfs-cache-min-free-space",
+    "1G",
+    "--vfs-cache-max-age",
+    "168h",
+    "--buffer-size",
+    "8M",
+    "--vfs-read-ahead",
+    "16M",
+    "--vfs-read-chunk-size",
+    "8M",
+    "--vfs-read-chunk-size-limit",
+    "128M",
+    "--vfs-write-back",
+    "10s",
+    "--dir-cache-time",
+    "10m",
+    "--poll-interval",
+    "30s",
+    "--file-perms",
+    "0600",
+    "--dir-perms",
+    "0700",
+    ...(process.platform === "win32" ? ["--network-mode"] : []),
+    "--volname",
+    `GCP-Drive · ${account.label}`,
+    "--log-level",
+    "ERROR",
+  ];
+}
+export function syncObservation(
+  stats: unknown,
+): "unknown" | "idle" | "transferring" | "problem" {
+  if (!stats || typeof stats !== "object") return "unknown";
+  const value = stats as Record<string, any>;
+  if (
+    value.diskCache?.outOfSpace === true ||
+    (typeof value.diskCache?.erroredFiles === "number" &&
+      value.diskCache.erroredFiles > 0)
+  )
+    return "problem";
+  if (
+    (typeof value.diskCache?.uploadsQueued === "number" &&
+      value.diskCache.uploadsQueued > 0) ||
+    (typeof value.diskCache?.uploadsInProgress === "number" &&
+      value.diskCache.uploadsInProgress > 0)
+  )
+    return "transferring";
+  if (
+    value.diskCache?.uploadsQueued === 0 &&
+    value.diskCache?.uploadsInProgress === 0
+  )
+    return "idle";
+  return "unknown";
+}
+export function sharedUpstreams(value: unknown, remote: string): string {
+  if (!Array.isArray(value))
+    throw new UserError("Lista de drives compartilhados inválida.");
+  const used = new Set<string>();
+  return value
+    .map((d: unknown) => {
+      if (
+        !d ||
+        typeof d !== "object" ||
+        !("id" in d) ||
+        !("name" in d) ||
+        typeof d.id !== "string" ||
+        typeof d.name !== "string" ||
+        !/^[\w-]+$/.test(d.id) ||
+        !d.name ||
+        /[\x00-\x1f/\\]/.test(d.name)
+      )
+        throw new UserError(
+          "Drive compartilhado com nome incompatível. O nome original foi preservado; montagem interrompida.",
+        );
+      let label = d.name;
+      let suffix = 2;
+      while (used.has(label)) label = `${d.name} (${suffix++})`;
+      used.add(label);
+      return JSON.stringify(
+        `${label}=${remote},team_drive=${d.id},root_folder_id=:`,
+      );
+    })
+    .join(" ");
+}
+export function parseEntries(value: unknown): Entry[] {
+  if (!Array.isArray(value)) throw new UserError("Resposta de arquivos inválida.");
+  return value.map((row) => {
+    if (
+      !row ||
+      typeof row !== "object" ||
+      typeof row.Name !== "string" ||
+      typeof row.Path !== "string" ||
+      typeof row.IsDir !== "boolean" ||
+      typeof row.Size !== "number" ||
+      typeof row.ModTime !== "string"
+    )
+      throw new UserError("Arquivo com metadados inválidos.");
+    relativePath(row.Path);
+    return {
+      Name: row.Name,
+      Path: row.Path,
+      Size: row.Size,
+      IsDir: row.IsDir,
+      ModTime: row.ModTime,
+    };
+  });
+}
+export function systemLanguage(value: string): "pt-BR" | "en" | "es" {
+  return value.toLowerCase().startsWith("en")
+    ? "en"
+    : value.toLowerCase().startsWith("es")
+      ? "es"
+      : "pt-BR";
+}
+/** RC paths are relative to the remote root; CLI listings are relative to the selected folder. */
+export function parseFolderListing(value:unknown,folder:string):Entry[]{
+  return parseEntries(value).map(entry=>{
+    if(entry.Name.includes('/')||entry.Name.includes('\\')||entry.Name==='.'||entry.Name==='..'||(entry.Path!==entry.Name&&entry.Path!==(folder?folder+'/':'')+entry.Name))throw new UserError('Resposta de pasta com caminho incompatível.');
+    return {...entry,Path:entry.Name};
+  });
+}
