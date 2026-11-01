@@ -8,9 +8,9 @@ Pacotes gerados a partir do commit `f07382ee3e9ff133001822a05a661e3a7e5e358f`.
 | Sistema | Arquivo |
 |---|---|
 | Windows x64 | GCP-Drive-Setup-0.3.0-beta.2-x64.exe |
-| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-x64.deb |
-| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-x64.rpm |
-| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-x64.AppImage |
+| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-amd64.deb |
+| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-x86_64.rpm |
+| Linux x64 | GCP-Drive-0.3.0-beta.2-linux-x86_64.AppImage |
 | macOS Intel | GCP-Drive-0.3.0-beta.2-macOS-x64.dmg |
 | macOS Apple Silicon | GCP-Drive-0.3.0-beta.2-macOS-arm64.dmg |
 
