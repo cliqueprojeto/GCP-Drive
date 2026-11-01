@@ -1,0 +1,65 @@
+name: Publish verified packages
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Test packages run ID
+        required: true
+      tag:
+        description: Existing draft release tag
+        required: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Validate successful build and draft source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]
+          mkdir -p .local/publish
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > .local/publish/run.json
+          gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish > .local/publish/release.json
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const run=JSON.parse(readFileSync('.local/publish/run.json','utf8'));
+          const release=JSON.parse(readFileSync('.local/publish/release.json','utf8'));
+          assert.equal(run.repository.full_name,process.env.GH_REPO);
+          assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');
+          assert.equal(run.path,'.github/workflows/packages.yml');
+          assert.equal(release.tagName,process.env.RELEASE_TAG);
+          assert.equal(release.isDraft,true);assert.equal(release.isPrerelease,true);
+          assert.equal(release.targetCommitish,run.head_sha);
+          JS
+      - name: Download the four approved build artifacts
+        shell: bash
+        run: gh run download "$BUILD_RUN" --dir .local/publish/artifacts
+      - name: Verify all six packages against build checksums
+        shell: bash
+        run: node scripts/verify-release.mjs .local/publish/artifacts .local/publish/assets "${RELEASE_TAG#v}"
+      - name: Upload verified assets and publish the prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" .local/publish/assets/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease
