@@ -49,7 +49,7 @@ O gerenciador não remove automaticamente configurações, contas ou cache no pe
 
 ## Validação
 
-O workflow **Arch Linux package** constrói a receita com `makepkg` como usuário comum em um contêiner Arch, instala o pacote com pacman e verifica dependências dinâmicas, entrada desktop, ícone, licenças, permissões do sandbox e execução do motor. O relatório de execução fica nos GitHub Actions.
+O workflow **Arch Linux package** constrói a receita com `makepkg` como usuário comum em um contêiner Arch, instala o pacote com pacman e verifica dependências dinâmicas, entrada desktop, licenças, permissões do sandbox e execução do motor. A [execução da revisão 2](https://github.com/cliqueprojeto/GCP-Drive/actions/runs/41545927213) passou, incluindo Electron 45.1.0 em modo Node e rclone 1.75.2. O `namcap` não apresentou erros; avisos de bibliotecas de compatibilidade do binário e dependências usadas por carregamento dinâmico ou comandos externos permanecem no relatório. Os arquivos publicados foram conferidos contra SHA-256.
 
 Contêiner sem sessão gráfica não homologa cofre, login cloud, montagem FUSE, bandeja ou integração com Nautilus/Nemo/KDE em uma sessão real. A versão continua beta; comece com dados de teste.
 
