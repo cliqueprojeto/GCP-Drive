@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Prepare disposable Arch build environment
-        run: pacman -Syu --noconfirm --needed git sudo libarchive namcap desktop-file-utils pax-utils
+        run: pacman -Syu --noconfirm --needed git sudo libarchive namcap desktop-file-utils pax-utils gnome-keyring
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
