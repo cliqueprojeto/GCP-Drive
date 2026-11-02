@@ -1,0 +1,43 @@
+# Maintainer: Bruno Albertini <cliqueprojeto@users.noreply.github.com>
+pkgname=gcp-drive-bin
+pkgver=0.3.0beta.2
+pkgrel=1
+pkgdesc='Cliente multicloud com streaming, múltiplas contas e interface gráfica'
+arch=('x86_64')
+url='https://github.com/cliqueprojeto/GCP-Drive'
+license=('GPL-3.0-only' 'MIT' 'BSD-3-Clause')
+depends=('alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'gcc-libs' 'glibc'
+         'gtk3' 'hicolor-icon-theme' 'libcups' 'libdrm' 'libsecret' 'libx11'
+         'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes'
+         'libxkbcommon' 'libxrandr' 'libxscrnsaver' 'libxtst' 'mesa'
+         'nspr' 'nss' 'pango' 'xdg-utils' 'fuse3' 'org.freedesktop.secrets')
+optdepends=('python-gobject: integração opcional com Nautilus/Nemo')
+provides=("gcp-drive=$pkgver")
+conflicts=('gcp-drive')
+options=('!strip' '!debug')
+_upstream_version=0.3.0-beta.2
+_deb="gcp-drive-${_upstream_version}-amd64.deb"
+source=("${_deb}::${url}/releases/download/v${_upstream_version}/GCP-Drive-${_upstream_version}-linux-amd64.deb"
+        "LICENSE::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v${_upstream_version}/LICENSE"
+        "THIRD_PARTY_NOTICES.md::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v${_upstream_version}/THIRD_PARTY_NOTICES.md")
+noextract=("$_deb")
+sha256sums=('a9d70422dc2d0f68ca1553c41f78ace09c1628accc0c30a1497025fb7b1513ba'
+            '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
+            '0a96336bc9f583916aa4a7c3065228daf5dda2c472cffb3ee8dc8f0cddbb9f2f')
+
+package() {
+  set -o pipefail
+  bsdtar -xOf "$srcdir/$_deb" data.tar.xz | bsdtar -xf - -C "$pkgdir"
+  # Normalizar os modos do artefato sem desativar o sandbox do Chromium.
+  find "$pkgdir/opt/GCP-Drive" -type d -exec chmod 755 {} +
+  find "$pkgdir/opt/GCP-Drive" -type f -exec chmod 644 {} +
+  chmod 755 "$pkgdir/opt/GCP-Drive/gcp-drive" \
+            "$pkgdir/opt/GCP-Drive/chrome_crashpad_handler" \
+            "$pkgdir/opt/GCP-Drive/resources/rclone/rclone"
+  chmod 4755 "$pkgdir/opt/GCP-Drive/chrome-sandbox"
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s /opt/GCP-Drive/gcp-drive "$pkgdir/usr/bin/gcp-drive"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/THIRD_PARTY_NOTICES.md" "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+  chmod 644 "$pkgdir/usr/share/applications/gcp-drive.desktop"
+}

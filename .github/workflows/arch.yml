@@ -1,0 +1,84 @@
+name: Arch Linux package
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Attach Arch package to its existing GitHub release
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: arch-package
+  cancel-in-progress: false
+jobs:
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    timeout-minutes: 25
+    steps:
+      - name: Prepare disposable Arch build environment
+        run: pacman -Syu --noconfirm --needed git sudo libarchive namcap desktop-file-utils pax-utils
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build as an unprivileged user
+        shell: bash
+        run: |
+          set -euo pipefail
+          useradd --create-home builder
+          printf 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/gcp-builder
+          chmod 440 /etc/sudoers.d/gcp-builder
+          chown -R builder:builder packaging/arch/gcp-drive-bin
+          runuser -u builder -- bash -c '
+            set -euo pipefail
+            cd "$1"
+            makepkg --syncdeps --noconfirm --cleanbuild
+            makepkg --printsrcinfo > .SRCINFO
+            makepkg --source --force
+          ' _ "$GITHUB_WORKSPACE/packaging/arch/gcp-drive-bin"
+      - name: Install and inspect the package in Arch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packaging/arch/gcp-drive-bin
+          pacman -U --noconfirm ./*.pkg.tar.zst
+          pacman -Q gcp-drive-bin
+          desktop-file-validate /usr/share/applications/gcp-drive.desktop
+          test "$(stat -c '%U:%a' /opt/GCP-Drive/chrome-sandbox)" = root:4755
+          test -x /usr/bin/gcp-drive
+          test -x /opt/GCP-Drive/resources/rclone/rclone
+          test -f /usr/share/licenses/gcp-drive-bin/LICENSE
+          ! ldd /opt/GCP-Drive/gcp-drive | grep 'not found'
+          /opt/GCP-Drive/resources/rclone/rclone version
+          /opt/GCP-Drive/resources/rclone/rclone mount --help > /dev/null
+          ELECTRON_RUN_AS_NODE=1 /usr/bin/gcp-drive -e 'console.log(process.versions.electron)'
+          namcap PKGBUILD > namcap-report.txt
+          namcap ./*.pkg.tar.zst >> namcap-report.txt
+          sha256sum ./*.pkg.tar.zst ./*.src.tar.gz > SHA256SUMS-ARCH
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gcp-drive-arch-x86_64
+          path: |
+            packaging/arch/gcp-drive-bin/*.pkg.tar.zst
+            packaging/arch/gcp-drive-bin/*.src.tar.gz
+            packaging/arch/gcp-drive-bin/.SRCINFO
+            packaging/arch/gcp-drive-bin/SHA256SUMS-ARCH
+            packaging/arch/gcp-drive-bin/namcap-report.txt
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Attach verified Arch files to the GitHub release
+        if: inputs.publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pacman -S --noconfirm --needed github-cli
+          cd packaging/arch/gcp-drive-bin
+          sha256sum --check SHA256SUMS-ARCH
+          tag="$(bash -c 'source PKGBUILD; printf "v%s" "$_upstream_version"')"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]
+          gh release view "$tag"
+          gh release upload "$tag" ./*.pkg.tar.zst ./*.src.tar.gz SHA256SUMS-ARCH --clobber
