@@ -49,12 +49,14 @@ jobs:
           test -x /usr/bin/gcp-drive
           test -x /opt/GCP-Drive/resources/rclone/rclone
           test -f /usr/share/licenses/gcp-drive-bin/LICENSE
-          ! ldd /opt/GCP-Drive/gcp-drive | grep 'not found'
+          ldd /opt/GCP-Drive/gcp-drive > ldd-report.txt
+          if grep -q 'not found' ldd-report.txt; then cat ldd-report.txt; exit 1; fi
           /opt/GCP-Drive/resources/rclone/rclone version
           /opt/GCP-Drive/resources/rclone/rclone mount --help > /dev/null
           ELECTRON_RUN_AS_NODE=1 /usr/bin/gcp-drive -e 'console.log(process.versions.electron)'
           namcap PKGBUILD > namcap-report.txt
           namcap ./*.pkg.tar.zst >> namcap-report.txt
+          cat namcap-report.txt
           sha256sum ./*.pkg.tar.zst ./*.src.tar.gz > SHA256SUMS-ARCH
       - uses: actions/upload-artifact@v4
         with:

@@ -12,6 +12,7 @@ Desenvolvido por **Bruno Albertini | [Gestão Cultural Pro](https://gestaocultur
 |---|---|---|
 | Windows | x64 | EXE |
 | Linux | x64 | DEB, RPM e AppImage |
+| Arch Linux | x86_64 | Pacote pacman e receita compatível com AUR — [instalação](docs/ARCH-LINUX.md) |
 | macOS Intel | x64 | DMG |
 | macOS Apple Silicon, incluindo M1 | arm64 | DMG |
 
