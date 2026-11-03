@@ -82,4 +82,4 @@ O app lê os metadados do cache do motor (`vfsMeta`, rclone 1.75.2) de cada unid
 
 As pastas não recebem cor agregada, exceto quando há uma transferência em curso dentro delas. O painel "Meus arquivos" mostra esses estados nos três sistemas. No Linux, a extensão instalada pelo app no Nautilus e no Nemo mostra os mesmos estados como emblemas (`emblem-default`, `emblem-synchronizing`, `emblem-web`, `emblem-important`). A extensão requer `python3-nautilus` ou `nemo-python`. Depois da primeira instalação, feche e reabra o gerenciador de arquivos.
 
-Dolphin (plugin C++/Qt), Finder (extensão Finder Sync assinada) e Explorador (Cloud Files API em vez de WinFsp) exigem integrações nativas próprias e não estão nesta versão.
+O GCP-Drive não terá extensões nativas para Dolphin, Finder ou Explorador. Nesses gerenciadores, os estados aparecem só no painel do app.
