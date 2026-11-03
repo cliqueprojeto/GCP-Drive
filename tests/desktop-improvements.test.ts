@@ -46,3 +46,12 @@ test('removing a sync plan waits for finalization and preserves user data and re
   await Promise.resolve();assert.equal(removed,false);assert.equal(plans.length,1);assert.equal(plans[0].enabled,false);
   release();await removing;assert.equal(plans.length,0);assert.equal(manager.active,false);assert.ok(persisted>=3);manager.stopTimers();
 });
+test("engine activity follows open items and advancing counters, not a static total", async () => {
+  const {engineActivity}=await import('../src/mount-telemetry.ts');
+  const first=engineActivity({bytes:10,checks:0,transfers:1,listed:5});
+  assert.equal(first.active,false);
+  assert.equal(engineActivity({bytes:10,checks:0,transfers:1,listed:5},first.counters).active,false);
+  assert.equal(engineActivity({bytes:10,checks:0,transfers:1,listed:9},first.counters).active,true);
+  assert.equal(engineActivity({bytes:10,transferring:[{name:'a'}]},first.counters).active,true);
+  assert.equal(engineActivity({bytes:-4,listed:'x'}).counters.bytes,0);
+});

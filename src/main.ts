@@ -41,6 +41,7 @@ import type {
 } from "./contracts.ts";
 import {
   mountArgs,
+  volumeName,
   parseEntries,
   parseFolderListing,
   provider,
@@ -52,10 +53,10 @@ import {
 } from "./core.ts";
 import { FileIndex } from "./index-store.ts";
 import { NativeIcons } from './native-icons.ts';
-import { mountTelemetry } from './mount-telemetry.ts';
+import { engineActivity, mountTelemetry, type EngineCounters } from './mount-telemetry.ts';
 import { ListingCache } from './listing-cache.ts';
 import { setDriveIcon,removeDriveIcon } from './drive-icon.ts';
-import { windowsNavigation } from './windows-navigation.ts';
+import { removeWindowsNavigation } from './windows-navigation.ts';
 import { windowsContext } from './windows-context.ts';
 import { providers } from './providers.ts';
 import { createPrivateRemote } from './private-auth.ts';
@@ -74,6 +75,7 @@ import {
   chooseDriveLetter,
   logicalDrives,
   ensureEmptyMountDirectory,
+  mountVisible,
   pendingWrites,
 } from "./mount-platform.ts";
 import type { MountSupport } from "./mount-platform.ts";
@@ -109,7 +111,14 @@ type OwnedMount = {
   child: ChildProcess;
   endpoint: string;
   auth: string;
+  /** Label fixed at mount time; Explorer keys its per-user label by this share name. */
+  volume: string;
+  /** Last core/stats counters and the time until which the tray shows engine activity. */
+  counters?: EngineCounters;
+  activeUntil?: number;
 };
+/** Panel-initiated opens and listings animate the tray before the next engine observation. */
+let panelActiveUntil = 0;
 const mounts = new Map<string, OwnedMount>();
 const commands = new CommandGroup();
 const longCommands = new Set<ChildProcess>();
@@ -545,6 +554,40 @@ async function rc(mount: OwnedMount, operation: string, input:Record<string,unkn
   if (!response.ok) throw new UserError("Unidade ainda indisponível.");
   return response.json();
 }
+/** Eject/Disconnect in a file manager ends rclone; only the panel disconnects, so bounded retries restore the drive. */
+const remounts = new Map<string, { attempts: number; timer?: NodeJS.Timeout }>();
+function scheduleRemount(id: string, runningSince: number) {
+  if (quitting || quittingInProgress || !prefs.accounts.some((a) => a.id === id)) return;
+  const previous = remounts.get(id);
+  clearTimeout(previous?.timer);
+  const attempts = Date.now() - runningSince > 300000 ? 0 : (previous?.attempts ?? 0);
+  const delays = [2000, 5000, 15000, 30000, 60000];
+  if (attempts >= delays.length) {
+    remounts.delete(id);
+    record("A unidade não pôde ser restaurada automaticamente. Use Conectar no painel.", "error", { accountId: id });
+    return;
+  }
+  const entry: { attempts: number; timer?: NodeJS.Timeout } = { attempts: attempts + 1 };
+  entry.timer = setTimeout(() => {
+    mutation = mutation.then(async () => {
+      if (remounts.get(id) !== entry || quitting || quittingInProgress) return;
+      entry.timer = undefined;
+      const account = prefs.accounts.find((a) => a.id === id);
+      if (!account || mounts.get(id)?.state.phase === "running") return;
+      try {
+        await mount(account);
+        record(`Unidade restaurada: ${account.label}`, "info", { accountId: id });
+      } catch (e) {
+        record(`${account.label}: ${e instanceof Error ? userMessage(e) : "Não foi possível restaurar a unidade."}`, "error", { accountId: id });
+      }
+    });
+  }, delays[attempts]);
+  remounts.set(id, entry);
+}
+function cancelRemount(id: string) {
+  clearTimeout(remounts.get(id)?.timer);
+  remounts.delete(id);
+}
 async function mount(account: Account) {
   const previous = mounts.get(account.id);
   if (previous) {
@@ -616,8 +659,10 @@ async function mount(account: Account) {
     child,
     endpoint: `http://${endpoint}`,
     auth: Buffer.from(`gcp:${password}`).toString("base64"),
+    volume: volumeName(account),
   };
   mounts.set(account.id, owned);
+  let runningSince: number | undefined;
   child.stderr?.on("data", () => {});
   child.once("error", () => {
     owned.state.phase = "error";
@@ -628,20 +673,32 @@ async function mount(account: Account) {
     if (owned.state.phase === "stopping" && code === 0)
       mounts.delete(account.id);
     else {
+      const external = owned.state.phase !== "stopping" && runningSince !== undefined;
       owned.state.phase = "error";
       owned.state.message =
         "Unidade encerrada. Cache preservado; verifique WinFsp/FUSE e conectividade.";
       record(
-        `A unidade ${account.label} foi encerrada; cache preservado.`,
+        external
+          ? `A unidade ${account.label} foi desmontada fora do GCP-Drive; restaurando. Para desconectar, use o painel.`
+          : `A unidade ${account.label} foi encerrada; cache preservado.`,
         "error",
       );
+      if (external) scheduleRemount(account.id, runningSince!);
     }
   });
   for (let attempt = 0; attempt < 30; attempt++) {
     if (owned.state.phase === "error") throw new UserError(owned.state.message??'Não foi possível montar a unidade.');
     try {
       await rc(owned, "vfs/stats");
+      if (!(await mountVisible(owned.state.path))) throw new UserError("Unidade ainda indisponível.");
       owned.state.phase = "running";
+      runningSince = Date.now();
+      // Warm the listings opened first in the background; file managers and the panel then share the VFS cache.
+      void rc(owned, "vfs/refresh", {
+        _async: true,
+        recursive: false,
+        ...(account.provider === "drive" ? { dir: "Meu Drive", dir2: "Compartilhados comigo" } : {}),
+      }).catch(() => {});
       if(!(prefs.importedMountedShortcuts??[]).includes(account.id)){
         prefs.importedMountedShortcuts??=[];prefs.importedMountedShortcuts.push(account.id);
         if(!prefs.favorites.some(f=>f.accountId===account.id&&f.path===''))prefs.favorites.push({accountId:account.id,path:'',name:account.label});
@@ -650,8 +707,8 @@ async function mount(account: Account) {
       if(process.platform==='win32'){
         const iconPath=path.join(root,'drive.ico');
         await copyFile(path.join(app.getAppPath(),'assets/icon.ico'),iconPath);
-        await setDriveIcon(mountPath,iconPath).catch(()=>record('Não foi possível personalizar o ícone desta unidade.','error'));
-        await windowsNavigation(account,mountPath+'\\',iconPath).catch(()=>record('Não foi possível fixar a unidade na navegação do Explorador.','error'));
+        await setDriveIcon(mountPath,iconPath,owned.volume).catch(()=>record('Não foi possível personalizar o ícone desta unidade.','error'));
+        await removeWindowsNavigation(account).catch(()=>record('Não foi possível remover o atalho duplicado do Explorador.','error'));
         if(app.isPackaged)await windowsContext(process.execPath,iconPath,[...mounts.values()].map(m=>m.state.path)).catch(()=>record('Não foi possível preparar as ações do Explorador.','error'));
       }
       record(`Streaming ativo: ${account.label}`);
@@ -666,6 +723,7 @@ async function mount(account: Account) {
   throw new UserError(owned.state.message);
 }
 async function unmountAccount(id: string) {
+  cancelRemount(id);
   const owned = mounts.get(id);
   if (!owned) {
     mountFailures.delete(id);
@@ -774,8 +832,6 @@ async function execute<K extends keyof Operations>(
       account.label=label;await save();
       const rootFavorite=prefs.favorites.find(f=>f.accountId===account.id&&f.path==='');
       if(rootFavorite){rootFavorite.name=label;await save();}
-      const owned=mounts.get(account.id);
-      if(owned?.state.phase==='running'&&process.platform==='win32')await windowsNavigation(account,owned.state.path,path.join(root,'drive.ico'));
       record(`Nome da conta atualizado: ${label}`);return null;
     }
     case 'fullscreen': window.setFullScreen(!window.isFullScreen());return window.isFullScreen();
@@ -914,7 +970,7 @@ async function execute<K extends keyof Operations>(
         );
       await unmountAccount(account.id);
       await vault();
-      if(account.mountLetter)await windowsNavigation(account,account.mountLetter+'\\',path.join(root,'drive.ico'),true);
+      await removeWindowsNavigation(account).catch(()=>{});
       await copyFile(configFile, configFile + ".bak");
       for (const name of [
         account.id + "-root",
@@ -1159,15 +1215,15 @@ async function execute<K extends keyof Operations>(
     case "list": {
       const account = getAccount(input?.accountId);
       const remote = relativePath(input?.path);
+      panelActiveUntil = Date.now() + 1500;
       await vault();
       const owned=mounts.get(account.id);
       const entries = await listings.get(account.id+'\0'+remote,async()=>{
-        const fs=await accountRoot(account);
-        if(owned?.state.phase==='running'){
-          const result=await rc(owned,'operations/list',{fs,remote,opt:{recurse:false,noMimeType:true}},45000);
-          return parseFolderListing(result.list,remote);
-        }
-        return parseFolderListing(JSON.parse(await run(['lsjson',fs+remote,'--max-depth','1','--no-mimetype'])),remote);
+        // A mounted drive answers from its VFS directory cache, shared with the file manager; a separate
+        // backend listing would repeat the cloud request and compete with the mount for the provider's quota.
+        if(owned?.state.phase==='running')
+          return parseFolderListing(JSON.parse(await run(['lsjson',withinMount(owned.state.path,remote),'--max-depth','1','--no-mimetype'])),'');
+        return parseFolderListing(JSON.parse(await run(['lsjson',(await accountRoot(account))+remote,'--max-depth','1','--no-mimetype'])),remote);
       });
       if(!prefs.accounts.some(a=>a.id===account.id)||(owned&&(mounts.get(account.id)!==owned||owned.state.phase==='stopping')))throw new UserError('A conta foi desconectada durante a consulta.');
       index.replaceFolder(account.id, remote, entries);
@@ -1191,6 +1247,7 @@ async function execute<K extends keyof Operations>(
       if (!owned || owned.state.phase !== "running")
         throw new UserError("Ative o streaming desta conta primeiro.");
       const target = withinMount(owned.state.path, input?.path);
+      panelActiveUntil = Date.now() + 3000;
       const error = await shell.openPath(target);
       if (error)
         throw new UserError(
@@ -1507,23 +1564,26 @@ else {
       let monitoring = false;
       let frame = 0;
       let trayAnimated = false;
-      const trayFrames = [0, 1, 2, 3].map((i) =>
+      const trayFrames = Array.from({ length: 8 }, (_, i) =>
         nativeImage.createFromPath(
           path.join(app.getAppPath(), `assets/tray-${i}.png`),
         ),
       );
       setInterval(() => {
+        const now = Date.now();
+        const busy = [...mounts.values()].filter((m) => m.state.sync === "transferring" || (m.activeUntil ?? 0) > now);
         const transferring =
-          folderSync.active || longCommands.size>0 ||
-          [...mounts.values()].some((m) => m.state.sync === "transferring");
+          folderSync.active || longCommands.size>0 || panelActiveUntil > now || busy.length > 0;
         if (transferring) {
           tray.setImage(trayFrames[frame++ % trayFrames.length]);
+          if (!trayAnimated) tray.setToolTip("GCP-Drive — processando arquivos…");
           trayAnimated = true;
         } else if (trayAnimated) {
           tray.setImage(icon.resize({ width: 20, height: 20 }));
+          tray.setToolTip("GCP-Drive");
           trayAnimated = false;
         }
-      }, 250);
+      }, 150);
       setInterval(() => {
         if (monitoring) return;
         monitoring = true;
@@ -1541,6 +1601,9 @@ else {
                   rc(m, "core/transferred"),
                 ]);
                 Object.assign(m.state,mountTelemetry(vfs,transfers,queue,completed));
+                const activity = engineActivity(transfers, m.counters);
+                m.counters = activity.counters;
+                if (activity.active) m.activeUntil = Date.now() + 3000;
                 m.state.sync = syncObservation(vfs);
                 if (
                   Array.isArray(transfers.transferring) &&

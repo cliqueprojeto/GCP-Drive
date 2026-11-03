@@ -11,7 +11,7 @@ Linux é uma plataforma prioritária. Nenhum item fica homologado apenas por ter
 | Meu Drive e Drives compartilhados dentro da unidade | Composição rclone Google | Conta com vários drives, permissões diferentes, alterações de membership, drives com mesmo nome |
 | Indicador de outra pessoa usando | Exibe desconhecido | API ou protocolo de presença confiável; sem ausência presumida e sem inferir identidade por arquivo temporário |
 | Verde/laranja/vermelho | Indicadores no app por observação VFS/transferências; cinza para desconhecido | Recuperação, falhas, estado obsoleto, download, upload e conflitantes; overlays de sistema pendentes |
-| Bandeja animada | Quatro frames durante transferências observadas | Windows, macOS, GNOME com indicador, Cinnamon, KDE; pausa e retomada; sem busy loop |
+| Bandeja animada | Oito frames durante listagens, aberturas, downloads, uploads e sincronização de pastas observados | Windows, macOS, GNOME com indicador, Cinnamon, KDE; pausa e retomada; sem busy loop |
 | Selecionar pastas do sistema e sincronizar automaticamente | Seletor nativo, prévia, revisão e scheduler implementados | Homologar com contas reais, exclusões, quedas, locks, reinício e volumes de produção |
 | Espelhamento bidirecional | rclone bisync com histórico, preservação de versões e pausa após finalização; fixtures locais passaram | Homologar com provedores reais, falhas e interrupção durante finalização |
 | Montar automaticamente no login | Montagem ao abrir app; integração de login Windows/macOS e autostart XDG com backup | Testar login real nos três sistemas, cofre bloqueado e rede tardia |

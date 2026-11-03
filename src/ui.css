@@ -998,6 +998,47 @@ footer b {
   font-size: 10px;
   color: #92849d;
 }
+.file-toolbar .icon-button {
+  font-size: 15px;
+  min-width: 28px;
+  border-radius: 8px;
+}
+.file-toolbar .icon-button:disabled {
+  opacity: 0.35;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.breadcrumb button {
+  font-size: 12px;
+  color: #8b7d9b;
+  padding: 3px 6px;
+  border-radius: 6px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.breadcrumb button:hover {
+  background: color-mix(in srgb, var(--theme-accent, #7b5cd6) 10%, transparent);
+}
+.breadcrumb button[aria-current="page"] {
+  color: inherit;
+  font-weight: 600;
+}
+.breadcrumb .revalidating {
+  margin-left: 8px;
+  color: #b1a8bf;
+}
+.empty-state small {
+  max-width: 420px;
+  text-align: center;
+  color: #8b7d9b;
+}
 .file-search {
   display: flex;
   align-items: center;

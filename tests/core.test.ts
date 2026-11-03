@@ -118,3 +118,21 @@ test("language detection prioritizes supported system languages and defaults to 
   assert.equal(systemLanguage("pt-PT"), "pt-BR");
   assert.equal(systemLanguage("de-DE"), "pt-BR");
 });
+test("mount tuning keeps listings until polled providers report changes and expires the others", () => {
+  const base = { id: "gcp-a", label: "Trabalho", autoMount: true };
+  const value = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
+  const drive = mountArgs({ ...base, provider: "drive" }, "M", "C", undefined, "linux");
+  assert.equal(value(drive, "--dir-cache-time"), "168h");
+  assert.equal(value(drive, "--poll-interval"), "15s");
+  assert.equal(value(drive, "--attr-timeout"), "10s");
+  assert.ok(drive.includes("--vfs-fast-fingerprint"));
+  assert.equal(drive.includes("--network-mode"), false);
+  const mega = mountArgs({ ...base, provider: "mega" }, "M", "C", undefined, "linux");
+  assert.equal(value(mega, "--dir-cache-time"), "5m");
+  assert.equal(mega.includes("--poll-interval"), false);
+  const windows = mountArgs({ ...base, provider: "onedrive" }, "G:", "C", undefined, "win32");
+  assert.ok(windows.includes("--network-mode"));
+  assert.equal(value(windows, "--volname"), "GCP-Drive · Trabalho");
+  const mac = mountArgs({ ...base, provider: "dropbox" }, "M", "C", undefined, "darwin");
+  assert.ok(mac.includes("noappledouble"));
+});

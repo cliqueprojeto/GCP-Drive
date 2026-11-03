@@ -54,7 +54,7 @@ Configuração de autenticação criptografada e chave protegida pelo cofre do s
 
 Teste inicialmente com cópias de arquivos. Alterações concorrentes podem produzir conflitos; nenhuma ferramenta garante ausência absoluta deles. A política de pastas preserva versões concorrentes, mas precisa de testes adicionais nos provedores.
 
-Indexação global por Windows Search, Spotlight e Tracker/Baloo, badges nativos completos, Finder/Dolphin, pin offline permanente, gerenciamento de versões e presença confirmada de outros editores ainda não estão concluídos. A busca atual cobre pastas visitadas. [Presença opcional](docs/PRESENCA.md) tem desenho documentado, sem serviço implantado. Exportar Google Docs não equivale a edição nativa bidirecional.
+Indexação global por Windows Search, Spotlight e Tracker/Baloo, badges nativos completos, Finder/Dolphin, pin offline permanente, gerenciamento de versões e presença confirmada de outros editores ainda não estão concluídos. A busca atual cobre pastas visitadas. Ajustes de cache, listagem e montagem, com medições e análise de motores alternativos, estão em [DESEMPENHO.md](docs/DESEMPENHO.md). [Presença opcional](docs/PRESENCA.md) tem desenho documentado, sem serviço implantado. Exportar Google Docs não equivale a edição nativa bidirecional.
 
 ## Desenvolvimento
 

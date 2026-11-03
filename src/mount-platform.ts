@@ -1,5 +1,5 @@
 import {UserError,userMessage} from './user-error.ts';
-import { access, constants, readdir } from "node:fs/promises";
+import { access, constants, readdir, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
@@ -141,6 +141,19 @@ export async function logicalDrives(): Promise<string[]> {
   )
     throw new UserError("Não foi possível consultar as unidades do Windows.");
   return value;
+}
+/** The RC server answers before the volume is attached; a mounted folder is on a different device than its parent. */
+export async function mountVisible(target: string): Promise<boolean> {
+  try {
+    if (process.platform === "win32") {
+      await access(target);
+      return true;
+    }
+    const [mounted, parent] = await Promise.all([stat(target), stat(path.dirname(target))]);
+    return mounted.dev !== parent.dev;
+  } catch {
+    return false;
+  }
 }
 export async function ensureEmptyMountDirectory(directory: string) {
   const entries = await readdir(directory);

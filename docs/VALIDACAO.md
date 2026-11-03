@@ -40,3 +40,16 @@ A montagem agora solicita arquivos `0600` e diretórios `0700`, sem `--allow-oth
 ## Não executado
 
 Login OAuth dos três provedores, token refresh, montagem WinFsp/FUSE, edição e salvar como por aplicativos externos, compartilhados reais, recuperação de upload, coexistência multicliente, encerramento com gravações, animação com transferências reais, Linux, macOS, indexadores nativos, menus de contexto e instaladores. A presença de configuração/código para esses itens não constitui aprovação para produção.
+
+## Desempenho da unidade — 0.3.0-beta.3 (3 de novembro de 2026)
+
+Executado no Windows x64 do usuário, com o Node 25.6.1 do sistema em vez do 24.22.1 fixado. Detalhes e números em [DESEMPENHO.md](DESEMPENHO.md).
+
+- Medição somente leitura de `G:` (0.3.0-beta.2 instalada, Google real): `Meu Drive` levou 8,3 s na primeira abertura e 9 ms na segunda; `Compartilhados comigo` (1171 itens) levou 13,5 s.
+- Rótulo do Explorador: `_LabelFromReg` em `MountPoints2\##server#<volume>` mudou o nome exibido de `GCP-Drive · CliqueProjetos (\server) (G:)` para `GCP-Drive · CliqueProjetos (G:)`. A consulta foi feita pelo namespace do Shell. `DriveIcons\<letra>\DefaultLabel` não teve efeito em unidade de rede e foi removido.
+- `rclone lsjson` sobre `G:\Meu Drive` e `G:\Compartilhados comigo` em cache levou cerca de 0,45–0,7 s, com os mesmos nomes, tamanhos e datas.
+- `tsc --noEmit` e 31 testes de fonte passaram, incluindo os parâmetros por provedor/sistema e a detecção de atividade do motor.
+- `scripts/mount-smoke.mjs` (WinFsp real, origem local): 5 de 5 execuções passaram depois da espera por volume visível. Antes dessa correção, 1 de 3 execuções falhou com `ENOENT`. O ensaio agora inclui a listagem do painel pelo volume (200 itens). Comparação com a beta.2 em DESEMPENHO.md.
+- `npm run build`, `scripts/smoke.mjs`, `scripts/engine-smoke.mjs` e `scripts/disconnect-smoke.mjs` passaram.
+
+Não executado: a nova versão montando contas reais, a remontagem após ejetar/desconectar no Explorador, Dolphin ou Finder, a remoção do atalho de navegação em uma instalação existente, a animação da bandeja com transferências reais, Linux e macOS.

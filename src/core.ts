@@ -30,12 +30,20 @@ export function withinMount(root: string, value: unknown): string {
     throw new UserError("Caminho fora da unidade.");
   return target;
 }
+/** Volume label; on Windows network mode it is also the share name Explorer records under \\server. */
+export function volumeName(account: Pick<Account, "label">): string {
+  return `GCP-Drive · ${account.label}`;
+}
+/** Providers whose backend reports remote changes; their directory cache is invalidated by polling, not by age. */
+const changePolling = new Set<Provider>(["drive", "onedrive", "dropbox"]);
 export function mountArgs(
   account: Account,
   mount: string,
   cache: string,
   remote = `${account.id}:`,
+  platform: NodeJS.Platform = process.platform,
 ): string[] {
+  const polled = changePolling.has(account.provider);
   return [
     "mount",
     remote,
@@ -45,32 +53,37 @@ export function mountArgs(
     "--cache-dir",
     path.join(cache, account.id),
     "--vfs-cache-max-size",
-    "5G",
+    "10G",
     "--vfs-cache-min-free-space",
-    "1G",
+    "2G",
     "--vfs-cache-max-age",
-    "168h",
+    "336h",
+    // Size and modification time identify cached data without hashing it again on open.
+    "--vfs-fast-fingerprint",
     "--buffer-size",
-    "8M",
-    "--vfs-read-ahead",
-    "16M",
+    "4M",
     "--vfs-read-chunk-size",
-    "8M",
-    "--vfs-read-chunk-size-limit",
-    "128M",
+    "16M",
+    "--vfs-read-chunk-streams",
+    "4",
     "--vfs-write-back",
-    "10s",
+    "5s",
+    // Listings stay valid until the provider reports a change; unpolled providers expire them.
     "--dir-cache-time",
-    "10m",
-    "--poll-interval",
-    "30s",
+    polled ? "168h" : "5m",
+    ...(polled ? ["--poll-interval", "15s"] : []),
+    // File managers stat each entry repeatedly; kernel and WinFsp attribute caching avoids those round trips.
+    "--attr-timeout",
+    "10s",
     "--file-perms",
     "0600",
     "--dir-perms",
     "0700",
-    ...(process.platform === "win32" ? ["--network-mode"] : []),
+    // Explorer treats network volumes as high latency and does not read media to build thumbnails.
+    ...(platform === "win32" ? ["--network-mode"] : []),
     "--volname",
-    `GCP-Drive · ${account.label}`,
+    volumeName(account),
+    ...(platform === "darwin" ? ["-o", "noappledouble", "-o", "noapplexattr"] : []),
     "--log-level",
     "ERROR",
   ];

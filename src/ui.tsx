@@ -354,6 +354,9 @@ function App() {
   const [folder, setFolder] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [slow, setSlow] = useState(false);
+  /** Last listing per folder: shown at once while the drive revalidates it. */
+  const listings = useRef(new Map<string, Entry[]>());
   const [search, setSearch] = useState("");
   const [folderAccount, setFolderAccount] = useState("");
   const [folderDestination, setFolderDestination] = useState("");
@@ -494,11 +497,24 @@ function App() {
         setStartup(s.preferences.startAtLogin);
       })
       .catch((e) => setError(userMessage(e)));
+    // A hidden window (tray) does not need snapshots; the engine keeps observing in the main process.
     const timer = setInterval(() => {
-      void refresh().catch(() => {});
+      if (document.visibilityState === "visible") void refresh().catch(() => {});
     }, 2500);
-    return () => clearInterval(timer);
+    const visible = () => {
+      if (document.visibilityState === "visible") void refresh().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
+    };
   }, []);
+  useEffect(() => {
+    if (!loading) { setSlow(false); return; }
+    const timer = setTimeout(() => setSlow(true), 3000);
+    return () => clearTimeout(timer);
+  }, [loading]);
   useEffect(()=>window.gcpDrive.onView(view=>setView(view)),[]);
   useEffect(()=>window.gcpDrive.onLocation(location=>void browse(location.accountId,location.path)),[]);
   useEffect(() => {
@@ -536,10 +552,17 @@ function App() {
     setFolder(remote);
     setView("files");
     setSearch("");
+    await load(serial, id, remote);
+  }
+  async function load(serial: number, id: string, remote: string) {
+    const key = id + "\0" + remote;
+    setEntries(listings.current.get(key) ?? []);
     setLoading(true);
-    setEntries([]);
     try {
       const files = await call("list", { accountId: id, path: remote });
+      listings.current.delete(key);
+      listings.current.set(key, files);
+      if (listings.current.size > 40) listings.current.delete(listings.current.keys().next().value!);
       if (serial === request.current) setEntries(files);
     } catch (e) {
       if (serial === request.current) setError(userMessage(e));
@@ -548,10 +571,14 @@ function App() {
     }
   }
   async function activateTab(item:{id:string;accountId:string;path:string}) {
-    const serial=++request.current;setAccount(item.accountId);setFolder(item.path);setSelected(undefined);setHits(null);setSearch('');setLoading(true);
-    try{const files=await call('list',{accountId:item.accountId,path:item.path});if(serial===request.current)setEntries(files);}catch(e){setError(userMessage(e));}finally{if(serial===request.current)setLoading(false);}
+    const serial=++request.current;setAccount(item.accountId);setFolder(item.path);setSelected(undefined);setHits(null);setSearch('');
+    await load(serial,item.accountId,item.path);
   }
   function selectedPath(){return folder?folder+'/'+selected!.Path:selected!.Path;}
+  // Rows read status and formatting several times per render; resolve each once per snapshot.
+  const statusOf=useMemo(()=>{const seen=new Map<string,string>();return(entry:Entry)=>{let value=seen.get(entry.Path);if(value===undefined){value=itemStatus(entry);seen.set(entry.Path,value);}return value;};},[snapshot,account,folder]);
+  const dateFormat=useMemo(()=>new Intl.DateTimeFormat(lang),[lang]);
+  const sizeFormat=useMemo(()=>{const number=new Intl.NumberFormat(lang,{maximumFractionDigits:1});const units=['B','KB','MB','GB','TB'];return(bytes:number)=>{let value=bytes,unit=0;while(value>=1024&&unit<units.length-1){value/=1024;unit++;}return number.format(value)+' '+units[unit];};},[lang]);
   function itemStatus(entry:Entry){const remote=folder?folder+'/'+entry.Path:entry.Path;const transfers=snapshot?.mounts.find(m=>m.accountId===account)?.transfers;return transfers?.find(t=>t.path===remote||(entry.IsDir&&t.phase!=='complete'&&t.path.startsWith(remote+'/')))?.phase??'unknown';}
   const displayedEntries=useMemo(()=>entries.filter(e=>e.Name.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))).sort((a,b)=>(descending?-1:1)*(sort==='size'?a.Size-b.Size:sort==='modified'?Date.parse(a.ModTime)-Date.parse(b.ModTime):sort==='type'?Number(b.IsDir)-Number(a.IsDir)||a.Name.split('.').at(-1)!.localeCompare(b.Name.split('.').at(-1)!,lang):sort==='state'?itemStatus(a).localeCompare(itemStatus(b)):a.Name.localeCompare(b.Name,lang,{numeric:true}))),[entries,search,sort,descending,lang,sort==='state'?snapshot:undefined]);
   const pageCount=Math.max(1,Math.ceil(displayedEntries.length/200));
@@ -1020,8 +1047,11 @@ function App() {
                   {selected&&<div className="selection-toolbar"><FileIcon iconKey={selected.IconKey}/><strong>{selected.Name}</strong><button onClick={()=>selected.IsDir?void browse(account,selectedPath()):void action(()=>call('open',{accountId:account,path:selectedPath()}))}>Abrir</button>{selected.IsDir&&<button onClick={()=>void browse(account,selectedPath(),true)}>Abrir em nova aba</button>}<button onClick={()=>void action(()=>call('web',{accountId:account,path:selectedPath(),share:true}))}>Compartilhar no provedor</button><button onClick={()=>void action(()=>call('download',{accountId:account,path:selectedPath()}))}>Baixar</button><button onClick={()=>{setNewName(selected.Name);setRenaming(true);}}>Renomear</button><button onClick={()=>void action(()=>call('favorite',{accountId:account,path:selectedPath(),name:selected.Name}))}>Fixar / desafixar</button><button aria-label="Limpar seleção" onClick={()=>setSelected(undefined)}><X size={16}/></button></div>}
                   {renaming&&selected&&<form className="rename-form" onSubmit={e=>{e.preventDefault();void action(async()=>{await call('rename',{accountId:account,path:selectedPath(),name:newName});setRenaming(false);await browse(account,folder);});}}><label>Novo nome <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)}/></label><button className="primary" disabled={busy}>Salvar nome</button><button type="button" onClick={()=>setRenaming(false)}>Cancelar</button></form>}
                   <div className="file-toolbar">
-                    {current.provider==='drive'&&<button disabled={busy} title="Atualiza a lista de unidades da conta; aguarda gravações antes de remontar" onClick={()=>void action(async()=>{await call('refreshShared',{accountId:account});await browse(account,'');})}>Atualizar drives compartilhados</button>}
                     <button
+                      className="icon-button"
+                      disabled={!folder}
+                      aria-label={t.back}
+                      title={t.back}
                       onClick={() =>
                         void browse(
                           account,
@@ -1029,12 +1059,23 @@ function App() {
                         )
                       }
                     >
-                      {t.back}
+                      ↑
                     </button>
-                    <span>
-                      {t.root}
-                      {folder && " / " + folder}
-                    </span>
+                    <nav className="breadcrumb" aria-label="Caminho">
+                      <button onClick={() => void browse(account, "")}>{current.label}</button>
+                      {folder && folder.split("/").map((part, index, parts) => (
+                        <React.Fragment key={index}>
+                          <ChevronRight size={12} />
+                          <button
+                            aria-current={index === parts.length - 1 ? "page" : undefined}
+                            onClick={() => void browse(account, parts.slice(0, index + 1).join("/"))}
+                          >
+                            {part}
+                          </button>
+                        </React.Fragment>
+                      ))}
+                      {loading && entries.length > 0 && <small className="revalidating">Atualizando…</small>}
+                    </nav>
                     <div className="file-search">
                       <Search size={16} />
                       <input
@@ -1066,6 +1107,7 @@ function App() {
                     >
                       <RefreshCw size={17} />
                     </button>
+                    {current.provider==='drive'&&(!folder||folder.startsWith('Drives compartilhados'))&&<button className="secondary" disabled={busy} title="Atualiza a lista de drives compartilhados; aguarda gravações e remonta a unidade" onClick={()=>void action(async()=>{await call('refreshShared',{accountId:account});await browse(account,'');})}>Atualizar drives compartilhados</button>}
                   </div>
                   {hits !== null && (
                     <section className="index-results">
@@ -1144,23 +1186,17 @@ function App() {
                               </span>
                             </td>
                             <td>
-                              {e.IsDir
-                                ? "—"
-                                : new Intl.NumberFormat(lang, {
-                                    maximumFractionDigits: 1,
-                                  }).format(e.Size / 1024) + " KB"}
+                              {e.IsDir ? "—" : sizeFormat(e.Size)}
                             </td>
                             <td>
                               {Number.isNaN(Date.parse(e.ModTime))
                                 ? "—"
-                                : new Intl.DateTimeFormat(lang).format(
-                                    new Date(e.ModTime),
-                                  )}
+                                : dateFormat.format(new Date(e.ModTime))}
                             </td>
                             <td>
                               <span className="file-status" title={t.presence}>
-                                <i className={'dot '+(itemStatus(e)==='problem'?'red':itemStatus(e)==='complete'?'green':itemStatus(e)==='unknown'?'gray':'orange')} />
-                                {itemStatus(e)==='unknown'?t.unknown:itemStatus(e)==='complete'?'Transferência concluída':itemStatus(e)==='problem'?t.problem:t.syncing}
+                                <i className={'dot '+(statusOf(e)==='problem'?'red':statusOf(e)==='complete'?'green':statusOf(e)==='unknown'?'gray':'orange')} />
+                                {statusOf(e)==='unknown'?t.unknown:statusOf(e)==='complete'?'Transferência concluída':statusOf(e)==='problem'?t.problem:t.syncing}
                               </span>
                             </td>
                             <td>
@@ -1201,8 +1237,8 @@ function App() {
                         ))}
                     </tbody>
                   </table>
-                  <div className="file-toolbar"><span>{displayedEntries.length} itens · página {actualPage+1} de {pageCount}</span><button disabled={actualPage===0} onClick={()=>setPageNumber(actualPage-1)}>Anterior</button><button disabled={actualPage+1>=pageCount} onClick={()=>setPageNumber(actualPage+1)}>Próxima</button></div>
-                  {(loading || !entries.length) && (
+                  {entries.length>0&&<div className="file-toolbar"><span>{displayedEntries.length} itens{pageCount>1&&` · página ${actualPage+1} de ${pageCount}`}</span>{pageCount>1&&<><button disabled={actualPage===0} onClick={()=>setPageNumber(actualPage-1)}>Anterior</button><button disabled={actualPage+1>=pageCount} onClick={()=>setPageNumber(actualPage+1)}>Próxima</button></>}</div>}
+                  {!entries.length && (
                     <div className="empty-state">
                       {loading ? (
                         <RefreshCw className="spin" size={28} />
@@ -1210,6 +1246,7 @@ function App() {
                         <Folder size={36} />
                       )}
                       <p>{loading ? t.loading : t.empty}</p>
+                      {loading && slow && <small>Pastas grandes podem levar alguns segundos na primeira abertura. Depois disso, o Explorador e o painel usam a mesma lista em cache.</small>}
                     </div>
                   )}
                   <div className="file-foot">

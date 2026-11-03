@@ -1,6 +1,6 @@
 import {mkdtemp,mkdir,writeFile,readFile,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {createServer} from 'node:net';import {randomBytes} from 'node:crypto';import {once} from 'node:events';import assert from 'node:assert/strict';
-import {mountArgs} from '../src/core.ts';import {chooseDriveLetter,logicalDrives,pendingWrites} from '../src/mount-platform.ts';
+import {mountArgs} from '../src/core.ts';import {chooseDriveLetter,logicalDrives,mountVisible,pendingWrites} from '../src/mount-platform.ts';
 if(process.platform!=='win32')throw Error('Este ensaio requer o driver Windows instalado.');
 const root=await mkdtemp(path.join(tmpdir(),'gcp-mounted-'));const source=path.join(root,'source');await mkdir(source);await mkdir(path.join(source,'Documentos'));
 for(let i=0;i<200;i++)await writeFile(path.join(source,'Documentos',`Documento ${i}.txt`),'conteúdo de teste '+i);
@@ -16,6 +16,10 @@ async function until(check){const deadline=Date.now()+20000;while(Date.now()<dea
 const timings={};async function timed(name,work){const start=performance.now();const result=await work();timings[name]=Math.round((performance.now()-start)*100)/100;return result;}
 try{
   await until(async()=>!!(await rc('vfs/stats')));
+  await until(()=>mountVisible(letter+'\\'));
+  // The panel lists a mounted folder through the volume, using rclone's local backend.
+  const panel=JSON.parse(await new Promise((resolve,reject)=>{let out='';const ls=spawn(path.resolve('vendor/win32-x64/rclone.exe'),['lsjson',letter+'\\Documentos','--max-depth','1','--no-mimetype','--config',config],{windowsHide:true,env,stdio:['ignore','pipe','ignore']});ls.stdout.on('data',v=>out+=v);ls.once('close',code=>code===0?resolve(out):reject(Error('lsjson '+code)));}));
+  assert.equal(panel.length,200);
   const files=await timed('coldDirectoryMs',()=>readdir(letter+'\\Documentos'));assert.equal(files.length,200);
   await timed('warmDirectoryMs',()=>readdir(letter+'\\Documentos'));
   assert.equal((await timed('coldFileMs',()=>readFile(letter+'\\Arquivo grande.bin'))).length,4*1024*1024);

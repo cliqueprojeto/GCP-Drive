@@ -1,6 +1,14 @@
 import type { MountState } from './contracts.ts';
 import { relativePath } from './core.ts';
 const number = (n:unknown) => typeof n==='number' && Number.isFinite(n) && n>=0 ? n : 0;
+export type EngineCounters = {bytes:number;checks:number;transfers:number;listed:number};
+/** Opening, listing, downloading and uploading all advance core/stats counters; any advance or open item is activity. */
+export function engineActivity(stats:any,previous?:EngineCounters):{active:boolean;counters:EngineCounters}{
+  const counters={bytes:number(stats?.bytes),checks:number(stats?.checks),transfers:number(stats?.transfers),listed:number(stats?.listed)};
+  const open=(Array.isArray(stats?.transferring)&&stats.transferring.length>0)||(Array.isArray(stats?.checking)&&stats.checking.length>0);
+  const advanced=previous!==undefined&&(Object.keys(counters) as (keyof EngineCounters)[]).some(key=>counters[key]>previous[key]);
+  return {active:open||advanced,counters};
+}
 /** Own the RC projection. Counters and active items are observations, never per-file success claims. */
 export function mountTelemetry(vfs: any, stats: any, queue: any,completed?:any): Pick<MountState,'transfers'|'cache'> {
   const items = new Map<string,NonNullable<MountState['transfers']>[number]>();

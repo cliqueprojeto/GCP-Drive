@@ -15,7 +15,7 @@ header.writeUInt16LE(32, 12);
 header.writeUInt32LE(png.length, 14);
 header.writeUInt32LE(22, 18);
 await writeFile("assets/icon.ico", Buffer.concat([header, png]));
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 8; i++) {
   const tray = createCanvas(40, 40);
   const ctx = tray.getContext("2d");
   ctx.drawImage(source, 5, 5, 30, 30);
@@ -23,7 +23,7 @@ for (let i = 0; i < 4; i++) {
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.arc(20, 20, 18, (i * Math.PI) / 2, (i * Math.PI) / 2 + Math.PI * 1.2);
+  ctx.arc(20, 20, 18, (i * Math.PI) / 4, (i * Math.PI) / 4 + Math.PI * 1.2);
   ctx.stroke();
   await writeFile(`assets/tray-${i}.png`, tray.toBuffer("image/png"));
 }
