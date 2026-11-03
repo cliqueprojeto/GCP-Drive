@@ -1,6 +1,6 @@
 # Maintainer: Bruno Albertini <cliqueprojeto@users.noreply.github.com>
 pkgname=gcp-drive-bin
-pkgver=0.3.0beta.3
+pkgver=0.3.0beta.4
 pkgrel=1
 pkgdesc='Cliente multicloud com streaming, múltiplas contas e interface gráfica'
 arch=('x86_64')
@@ -16,13 +16,13 @@ optdepends=('python-nautilus: indicadores de sincronização e ações no Nautil
 provides=("gcp-drive=$pkgver")
 conflicts=('gcp-drive')
 options=('!strip' '!debug')
-_upstream_version=0.3.0-beta.3
+_upstream_version=0.3.0-beta.4
 _deb="gcp-drive-${_upstream_version}-amd64.deb"
 source=("${_deb}::${url}/releases/download/v${_upstream_version}/GCP-Drive-${_upstream_version}-linux-amd64.deb"
         "LICENSE::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v${_upstream_version}/LICENSE"
         "THIRD_PARTY_NOTICES.md::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v${_upstream_version}/THIRD_PARTY_NOTICES.md")
 noextract=("$_deb")
-sha256sums=('98915bbcb6dfbfd6b0afd24bed8d5ac00b8dc5a6240176e211b2b5ed85dfc4d0'
+sha256sums=('6a952def520dd666605aea827f6d05fea39b42303d1c162b2ecd8f071f397949'
             '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
             '0a96336bc9f583916aa4a7c3065228daf5dda2c472cffb3ee8dc8f0cddbb9f2f')
 

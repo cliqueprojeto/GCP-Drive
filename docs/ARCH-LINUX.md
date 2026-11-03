@@ -2,16 +2,16 @@
 
 ## Instalação simples, sem compilar o aplicativo
 
-Na [release 0.3.0-beta.3](https://github.com/cliqueprojeto/GCP-Drive/releases/tag/v0.3.0-beta.3), baixe:
+Na [release 0.3.0-beta.4](https://github.com/cliqueprojeto/GCP-Drive/releases/tag/v0.3.0-beta.4), baixe:
 
-- `gcp-drive-bin-0.3.0beta.3-1-x86_64.pkg.tar.zst`
+- `gcp-drive-bin-0.3.0beta.4-1-x86_64.pkg.tar.zst`
 - `SHA256SUMS-ARCH`, para conferir a integridade do pacote.
 
 Na pasta do download, instale com o gerenciador do sistema:
 
 ```sh
 sha256sum --ignore-missing --check SHA256SUMS-ARCH
-sudo pacman -U ./gcp-drive-bin-0.3.0beta.3-1-x86_64.pkg.tar.zst
+sudo pacman -U ./gcp-drive-bin-0.3.0beta.4-1-x86_64.pkg.tar.zst
 ```
 
 O pacman resolve dependências nos repositórios configurados e apresenta as alterações para aprovação. Abra **GCP-Drive** na categoria **Internet**, ou execute `gcp-drive`. Conecte as contas pela interface. O motor já acompanha o pacote; não é necessário instalar rclone separadamente.

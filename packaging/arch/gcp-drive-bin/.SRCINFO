@@ -2,7 +2,7 @@
 # Mon Nov  2 23:30:56 UTC 2026
 pkgbase = gcp-drive-bin
 	pkgdesc = Cliente multicloud com streaming, múltiplas contas e interface gráfica
-	pkgver = 0.3.0beta.3
+	pkgver = 0.3.0beta.4
 	pkgrel = 1
 	url = https://github.com/cliqueprojeto/GCP-Drive
 	arch = x86_64
@@ -40,16 +40,17 @@ pkgbase = gcp-drive-bin
 	depends = xdg-utils
 	depends = fuse3
 	depends = org.freedesktop.secrets
-	optdepends = python-gobject: integração opcional com Nautilus/Nemo
-	provides = gcp-drive=0.3.0beta.3
+	optdepends = python-nautilus: indicadores de sincronização e ações no Nautilus
+	optdepends = nemo-python: indicadores de sincronização e ações no Nemo
+	provides = gcp-drive=0.3.0beta.4
 	conflicts = gcp-drive
-	noextract = gcp-drive-0.3.0-beta.3-amd64.deb
+	noextract = gcp-drive-0.3.0-beta.4-amd64.deb
 	options = !strip
 	options = !debug
-	source = gcp-drive-0.3.0-beta.3-amd64.deb::https://github.com/cliqueprojeto/GCP-Drive/releases/download/v0.3.0-beta.3/GCP-Drive-0.3.0-beta.3-linux-amd64.deb
-	source = LICENSE::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v0.3.0-beta.3/LICENSE
-	source = THIRD_PARTY_NOTICES.md::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v0.3.0-beta.3/THIRD_PARTY_NOTICES.md
-	sha256sums = 98915bbcb6dfbfd6b0afd24bed8d5ac00b8dc5a6240176e211b2b5ed85dfc4d0
+	source = gcp-drive-0.3.0-beta.4-amd64.deb::https://github.com/cliqueprojeto/GCP-Drive/releases/download/v0.3.0-beta.4/GCP-Drive-0.3.0-beta.4-linux-amd64.deb
+	source = LICENSE::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v0.3.0-beta.4/LICENSE
+	source = THIRD_PARTY_NOTICES.md::https://raw.githubusercontent.com/cliqueprojeto/GCP-Drive/v0.3.0-beta.4/THIRD_PARTY_NOTICES.md
+	sha256sums = 6a952def520dd666605aea827f6d05fea39b42303d1c162b2ecd8f071f397949
 	sha256sums = 3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986
 	sha256sums = 0a96336bc9f583916aa4a7c3065228daf5dda2c472cffb3ee8dc8f0cddbb9f2f
 
