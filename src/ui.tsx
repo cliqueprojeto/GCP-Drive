@@ -576,11 +576,13 @@ function App() {
   }
   function selectedPath(){return folder?folder+'/'+selected!.Path:selected!.Path;}
   // Rows read status and formatting several times per render; resolve each once per snapshot.
-  const statusOf=useMemo(()=>{const seen=new Map<string,string>();return(entry:Entry)=>{let value=seen.get(entry.Path);if(value===undefined){value=itemStatus(entry);seen.set(entry.Path,value);}return value;};},[snapshot,account,folder]);
+  // Transfers observed now take precedence over the cache state the listing carried.
+  const statusOf=useMemo(()=>{const seen=new Map<string,string>();return(entry:Entry)=>{let value=seen.get(entry.Path);if(value===undefined){value=itemStatus(entry);if(value==='unknown')value=entry.IsDir?'folder':entry.State??'unknown';seen.set(entry.Path,value);}return value;};},[snapshot,account,folder]);
+  const stateLabels:Record<string,[string,string]>={problem:['red',t.problem],complete:['green','Transferência concluída'],transferring:['orange',t.syncing],queued:['orange','Aguardando envio'],pending:['orange','Alteração aguardando envio'],local:['green','Disponível neste computador'],partial:['gray','Parcialmente baixado'],cloud:['gray','Somente na nuvem'],folder:['none','Pasta'],unknown:['gray',t.unknown]};
   const dateFormat=useMemo(()=>new Intl.DateTimeFormat(lang),[lang]);
   const sizeFormat=useMemo(()=>{const number=new Intl.NumberFormat(lang,{maximumFractionDigits:1});const units=['B','KB','MB','GB','TB'];return(bytes:number)=>{let value=bytes,unit=0;while(value>=1024&&unit<units.length-1){value/=1024;unit++;}return number.format(value)+' '+units[unit];};},[lang]);
   function itemStatus(entry:Entry){const remote=folder?folder+'/'+entry.Path:entry.Path;const transfers=snapshot?.mounts.find(m=>m.accountId===account)?.transfers;return transfers?.find(t=>t.path===remote||(entry.IsDir&&t.phase!=='complete'&&t.path.startsWith(remote+'/')))?.phase??'unknown';}
-  const displayedEntries=useMemo(()=>entries.filter(e=>e.Name.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))).sort((a,b)=>(descending?-1:1)*(sort==='size'?a.Size-b.Size:sort==='modified'?Date.parse(a.ModTime)-Date.parse(b.ModTime):sort==='type'?Number(b.IsDir)-Number(a.IsDir)||a.Name.split('.').at(-1)!.localeCompare(b.Name.split('.').at(-1)!,lang):sort==='state'?itemStatus(a).localeCompare(itemStatus(b)):a.Name.localeCompare(b.Name,lang,{numeric:true}))),[entries,search,sort,descending,lang,sort==='state'?snapshot:undefined]);
+  const displayedEntries=useMemo(()=>entries.filter(e=>e.Name.toLocaleLowerCase(lang).includes(search.toLocaleLowerCase(lang))).sort((a,b)=>(descending?-1:1)*(sort==='size'?a.Size-b.Size:sort==='modified'?Date.parse(a.ModTime)-Date.parse(b.ModTime):sort==='type'?Number(b.IsDir)-Number(a.IsDir)||a.Name.split('.').at(-1)!.localeCompare(b.Name.split('.').at(-1)!,lang):sort==='state'?statusOf(a).localeCompare(statusOf(b)):a.Name.localeCompare(b.Name,lang,{numeric:true}))),[entries,search,sort,descending,lang,sort==='state'?statusOf:undefined]);
   const pageCount=Math.max(1,Math.ceil(displayedEntries.length/200));
   const actualPage=Math.min(pageNumber,pageCount-1);
   const current = snapshot?.preferences.accounts.find((a) => a.id === account);
@@ -1195,8 +1197,8 @@ function App() {
                             </td>
                             <td>
                               <span className="file-status" title={t.presence}>
-                                <i className={'dot '+(statusOf(e)==='problem'?'red':statusOf(e)==='complete'?'green':statusOf(e)==='unknown'?'gray':'orange')} />
-                                {statusOf(e)==='unknown'?t.unknown:statusOf(e)==='complete'?'Transferência concluída':statusOf(e)==='problem'?t.problem:t.syncing}
+                                <i className={'dot '+stateLabels[statusOf(e)][0]} />
+                                {stateLabels[statusOf(e)][1]}
                               </span>
                             </td>
                             <td>

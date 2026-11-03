@@ -53,3 +53,11 @@ Executado no Windows x64 do usuário, com o Node 25.6.1 do sistema em vez do 24.
 - `npm run build`, `scripts/smoke.mjs`, `scripts/engine-smoke.mjs` e `scripts/disconnect-smoke.mjs` passaram.
 
 Não executado: a nova versão montando contas reais, a remontagem após ejetar/desconectar no Explorador, Dolphin ou Finder, a remoção do atalho de navegação em uma instalação existente, a animação da bandeja com transferências reais, Linux e macOS.
+
+## Indicadores de estado — 0.3.0-beta.4 (3 de novembro de 2026)
+
+- `tsc --noEmit` e 33 testes de fonte passaram. Os testes cobrem o cálculo de estado, a leitura incremental, o caso "ausente só vale como nuvem depois de leitura completa", os nomes codificados no Windows e o manifesto da extensão Linux.
+- A leitura somente leitura do cache real da conta Google em `G:` levou 85 ms: 49 metadados, 47 locais e 1 parcial. Um lock do Office com `"Rs": null` revelou um formato não previsto; ele passou a ser tratado como "somente na nuvem" e ganhou teste.
+- `npm run build`, `scripts/smoke.mjs`, `scripts/disconnect-smoke.mjs` e `scripts/mount-smoke.mjs` passaram. A sintaxe da extensão Python foi verificada com `ast.parse`.
+
+Não executado: Nautilus e Nemo reais (sem Linux gráfico nesta máquina), temas sem os emblemas usados, os estados no painel com a conta real e macOS.

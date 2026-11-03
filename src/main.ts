@@ -55,6 +55,7 @@ import { FileIndex } from "./index-store.ts";
 import { NativeIcons } from './native-icons.ts';
 import { engineActivity, mountTelemetry, type EngineCounters } from './mount-telemetry.ts';
 import { ListingCache } from './listing-cache.ts';
+import { entryCacheState, scanCache, type CacheScan } from './cache-state.ts';
 import { setDriveIcon,removeDriveIcon } from './drive-icon.ts';
 import { removeWindowsNavigation } from './windows-navigation.ts';
 import { windowsContext } from './windows-context.ts';
@@ -116,7 +117,17 @@ type OwnedMount = {
   /** Last core/stats counters and the time until which the tray shows engine activity. */
   counters?: EngineCounters;
   activeUntil?: number;
+  /** rclone keeps per-file metadata under <cache>/vfsMeta/<remote name>; its scan is the owner of cache states. */
+  metaRoot?: string;
+  cache?: CacheScan;
+  scannedAt?: number;
 };
+async function refreshCacheState(owned: OwnedMount, maxAge: number) {
+  if (!owned.metaRoot || (owned.scannedAt !== undefined && Date.now() - owned.scannedAt < maxAge)) return owned.cache;
+  owned.cache = await scanCache(owned.metaRoot, owned.cache);
+  owned.scannedAt = Date.now();
+  return owned.cache;
+}
 /** Panel-initiated opens and listings animate the tray before the next engine observation. */
 let panelActiveUntil = 0;
 const mounts = new Map<string, OwnedMount>();
@@ -660,6 +671,7 @@ async function mount(account: Account) {
     endpoint: `http://${endpoint}`,
     auth: Buffer.from(`gcp:${password}`).toString("base64"),
     volume: volumeName(account),
+    metaRoot: /^[\w-]+:$/.test(remote) ? path.join(root, "cache", account.id, "vfsMeta", remote.slice(0, -1)) : undefined,
   };
   mounts.set(account.id, owned);
   let runningSince: number | undefined;
@@ -1227,7 +1239,8 @@ async function execute<K extends keyof Operations>(
       });
       if(!prefs.accounts.some(a=>a.id===account.id)||(owned&&(mounts.get(account.id)!==owned||owned.state.phase==='stopping')))throw new UserError('A conta foi desconectada durante a consulta.');
       index.replaceFolder(account.id, remote, entries);
-      return entries.map(entry=>({...entry,IconKey:icons.key(entry.Name,entry.IsDir)}));
+      const scan=owned?.state.phase==='running'?await refreshCacheState(owned,2000).catch(()=>undefined):undefined;
+      return entries.map(entry=>({...entry,IconKey:icons.key(entry.Name,entry.IsDir),...(owned?.state.phase==='running'?{State:entryCacheState(scan,remote?remote+'/'+entry.Name:entry.Name,entry.IsDir)}:{})}));
     }
     case "search": {
       const account = getAccount(input?.accountId);
@@ -1387,7 +1400,7 @@ else {
     .whenReady()
     .then(async () => {
       await mkdir(root, { recursive: true, mode: 0o700 });
-      if(process.platform==='linux'&&app.isPackaged)await installLinuxShell(app.getPath('home'),path.join(app.getAppPath(),'assets/gcp-drive-file-manager.py')).catch(()=>record('As ações do gerenciador de arquivos não puderam ser ativadas.','error'));
+      if(process.platform==='linux'&&app.isPackaged)await installLinuxShell(app.getPath('home'),path.join(app.getAppPath(),'assets/gcp-drive-file-manager.py')).then(installed=>{if(installed.length)record(`Indicadores de sincronização instalados para ${installed.join(' e ')}. Feche e reabra o gerenciador de arquivos para ativá-los; é necessário o pacote python3-nautilus ou nemo-python.`);}).catch(()=>record('As ações do gerenciador de arquivos não puderam ser ativadas.','error'));
       icons=new NativeIcons(path.join(root,'system-icons'),(executable,args)=>commands.execute(executable,args,{timeout:5000,maxBytes:128*1024,env:process.env}));
       index = new FileIndex(path.join(root, "file-index.sqlite"));
       try{activityStore=new ActivityStore(path.join(root,'activity.sqlite'));for(const event of [...activity].reverse())activityStore.add(event);activity.length=0;setInterval(()=>{try{activityStore?.prune();}catch{}},3600000);}catch{record('O histórico local não pôde ser aberto. As atividades recentes continuam disponíveis nesta sessão.','error');}
@@ -1612,13 +1625,14 @@ else {
                   if(m.state.sync!=='problem')m.state.sync = "transferring";
                 m.state.observedAt = new Date().toISOString();
                 m.state.phase = "running";
+                await refreshCacheState(m, activity.active ? 4000 : 15000).catch(() => {});
               } catch {
                 m.state.sync = "unknown";
               }
             }),
         ).finally(() => {
           monitoring = false;
-          if(process.platform==='linux'&&app.isPackaged)void writeLinuxShellState(app.getPath('home'),process.execPath,[...mounts.values()].map(m=>m.state)).catch(()=>{});
+          if(process.platform==='linux'&&app.isPackaged)void writeLinuxShellState(app.getPath('home'),process.execPath,[...mounts.values()].map(m=>({state:m.state,cache:m.cache}))).catch(()=>{});
         });
       }, 2000);
       if (

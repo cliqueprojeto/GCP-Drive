@@ -56,8 +56,11 @@ export type MountState = {
   sync: "unknown" | "idle" | "transferring" | "problem";
   observedAt?: string;
 };
+/** Observed from the mount's VFS cache metadata: local = whole file on disk, partial = some ranges, pending = unsent change. */
+export type CacheState = "local" | "partial" | "pending" | "cloud" | "unknown";
 export type Entry = {
   IconKey?: string;
+  State?: CacheState;
   Name: string;
   Path: string;
   Size: number;

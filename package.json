@@ -1,7 +1,7 @@
 {
   "name": "gcp-drive",
   "productName": "GCP-Drive",
-  "version": "0.3.0-beta.3",
+  "version": "0.3.0-beta.4",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
@@ -154,6 +154,9 @@
         "libsecret-1-0",
         "fuse3 | fuse",
         "libfuse3-3 | libfuse2"
+      ],
+      "recommends": [
+        "python3-nautilus | nemo-python"
       ]
     },
     "rpm": {

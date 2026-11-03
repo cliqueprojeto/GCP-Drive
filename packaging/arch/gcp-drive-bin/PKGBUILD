@@ -11,7 +11,8 @@ depends=('alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'libgcc' 'glib2' 'glib
          'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes'
          'libxkbcommon' 'libxrandr' 'libxss' 'libxtst' 'mesa'
          'nspr' 'nss' 'pango' 'xdg-utils' 'fuse3' 'org.freedesktop.secrets')
-optdepends=('python-gobject: integração opcional com Nautilus/Nemo')
+optdepends=('python-nautilus: indicadores de sincronização e ações no Nautilus'
+            'nemo-python: indicadores de sincronização e ações no Nemo')
 provides=("gcp-drive=$pkgver")
 conflicts=('gcp-drive')
 options=('!strip' '!debug')

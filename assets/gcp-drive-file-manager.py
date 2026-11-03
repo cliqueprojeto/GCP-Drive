@@ -19,8 +19,8 @@ def state():
     _read_at = now
     try:
         with open(MANIFEST, encoding='utf-8') as file:
-            data = file.read(262145)
-        if len(data) > 262144:
+            data = file.read(8388609)
+        if len(data) > 8388608:
             raise ValueError('manifest too large')
         parsed = json.loads(data)
         _state = parsed if time.time() - parsed.get('timestamp', 0) < 15 else {}
@@ -40,6 +40,25 @@ def owned_path(uri):
             pass
     return None
 
+# States are interpreted by GCP-Drive from the engine cache; this extension only maps them to emblems.
+TRANSFER_EMBLEMS = {'queued': 'emblem-synchronizing', 'transferring': 'emblem-synchronizing', 'problem': 'emblem-important', 'complete': 'emblem-default'}
+CACHE_EMBLEMS = {'local': 'emblem-default', 'pending': 'emblem-synchronizing', 'partial': 'emblem-web', 'cloud': 'emblem-web'}
+def emblem_for(target):
+    current = state()
+    transfer = current.get('status', {}).get(target)
+    if transfer in TRANSFER_EMBLEMS:
+        return TRANSFER_EMBLEMS[transfer]
+    cached = current.get('cache', {}).get(target)
+    if cached is None:
+        for root in current.get('complete', []):
+            try:
+                if os.path.commonpath([target, root]) == root:
+                    cached = 'cloud'
+                    break
+            except ValueError:
+                pass
+    return CACHE_EMBLEMS.get(cached)
+
 class GCPDrive(GObject.GObject, Files.MenuProvider, Files.InfoProvider):
     def __init__(self):
         super().__init__()
@@ -48,7 +67,11 @@ class GCPDrive(GObject.GObject, Files.MenuProvider, Files.InfoProvider):
         GLib.timeout_add_seconds(3, self.refresh_status)
 
     def refresh_status(self):
-        current = state().get('status', {})
+        current = {}
+        for uri in self.files:
+            target = owned_path(uri)
+            if target:
+                current[target] = emblem_for(target)
         for uri, info in list(self.files.items()):
             target = Gio.File.new_for_uri(uri).get_path()
             if current.get(target) != self.previous_status.get(target):
@@ -79,8 +102,7 @@ class GCPDrive(GObject.GObject, Files.MenuProvider, Files.InfoProvider):
             if len(self.files) >= 2000:
                 self.files.clear()
             self.files[file.get_uri()] = file
-        status = state().get('status', {}).get(target)
-        emblem = {'queued': 'emblem-synchronizing', 'transferring': 'emblem-synchronizing', 'problem': 'emblem-important', 'complete': 'emblem-default'}.get(status)
+        emblem = emblem_for(target) if target and not file.is_directory() else None
         if emblem:
             file.add_emblem(emblem)
         return Files.OperationResult.COMPLETE

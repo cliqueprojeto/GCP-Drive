@@ -67,3 +67,19 @@ Recomendação: manter o rclone. Ele é o único motor aberto, multiprovedor e c
 - Dolphin, Nautilus e o Explorador ainda geram miniaturas e pré-visualizações de pastas lendo o conteúdo dos arquivos. No KDE, desativar "Visualizações de pastas" para unidades remotas reduz downloads. O app não altera essa configuração global.
 - Criar uma pasta ou renomear um item continua sendo uma operação síncrona no provedor. O gerenciador de arquivos espera a resposta da nuvem.
 - Indexação global (Windows Search, Spotlight, Tracker/Baloo), ícones de estado nativos, "manter offline" permanente e presença de outros editores continuam pendentes. Ver CfAPI/File Provider acima.
+
+## Indicadores de estado — 0.3.0-beta.4
+
+O app lê os metadados do cache do motor (`vfsMeta`, rclone 1.75.2) de cada unidade montada. Um arquivo só recebe a cor depois dessa leitura:
+
+| Cor | Estado | Origem |
+|---|---|---|
+| Verde | Disponível neste computador | Todos os bytes estão no cache e não há alteração pendente. |
+| Laranja | Enviando, aguardando envio ou alteração pendente | Fila de envio do motor ou `Dirty: true`. |
+| Cinza | Somente na nuvem ou parcialmente baixado | O arquivo não aparece numa leitura completa do cache, ou só parte dele está no disco. |
+| Vermelho | Problema | O envio falhou e está sendo repetido. |
+| Cinza "Não verificado" | Desconhecido | Leitura incompleta, metadado inválido ou nome que o Windows codifica de outra forma. |
+
+As pastas não recebem cor agregada, exceto quando há uma transferência em curso dentro delas. O painel "Meus arquivos" mostra esses estados nos três sistemas. No Linux, a extensão instalada pelo app no Nautilus e no Nemo mostra os mesmos estados como emblemas (`emblem-default`, `emblem-synchronizing`, `emblem-web`, `emblem-important`). A extensão requer `python3-nautilus` ou `nemo-python`. Depois da primeira instalação, feche e reabra o gerenciador de arquivos.
+
+Dolphin (plugin C++/Qt), Finder (extensão Finder Sync assinada) e Explorador (Cloud Files API em vez de WinFsp) exigem integrações nativas próprias e não estão nesta versão.
