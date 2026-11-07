@@ -41,7 +41,7 @@ def owned_path(uri):
     return None
 
 # States are interpreted by GCP-Drive from the engine cache; this extension only maps them to emblems.
-TRANSFER_EMBLEMS = {'queued': 'emblem-synchronizing', 'transferring': 'emblem-synchronizing', 'problem': 'emblem-important', 'complete': 'emblem-default'}
+TRANSFER_EMBLEMS = {'queued': 'emblem-synchronizing', 'transferring': 'emblem-synchronizing', 'waiting': 'emblem-synchronizing', 'problem': 'emblem-important', 'complete': 'emblem-default'}
 CACHE_EMBLEMS = {'local': 'emblem-default', 'pending': 'emblem-synchronizing', 'partial': 'emblem-web', 'cloud': 'emblem-web'}
 def emblem_for(target):
     current = state()

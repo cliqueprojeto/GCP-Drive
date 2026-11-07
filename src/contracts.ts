@@ -47,7 +47,7 @@ export type Preferences = {
   lastUpdateCheck?:string;
 };
 export type MountState = {
-  transfers?: {path:string; bytes:number; size:number; speed:number; phase:"transferring"|"queued"|"problem"|"complete"}[];
+  transfers?: {path:string; bytes:number; size:number; speed:number; phase:"transferring"|"waiting"|"queued"|"problem"|"complete"}[];
   cache?: {bytes:number; files:number; queued:number; uploading:number; errors:number};
   accountId: string;
   phase: "starting" | "running" | "stopping" | "error";

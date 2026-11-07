@@ -53,7 +53,8 @@ export class NativeIcons {
             const existing=await readdir(this.root);if(!existing.includes(filename)&&existing.length>=257)target=path.join(this.root,'lookup');
             try{await writeFile(target,'',{flag:'wx',mode:0o600});}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
           }
-          const image=await app.getFileIcon(target,{size:'normal'});return image.isEmpty()?'':image.resize({width:32,height:32}).toDataURL();
+          const image = await app.getFileIcon(target, { size: 'normal' }).catch(() => undefined);
+          return !image || image.isEmpty() ? '' : image.resize({ width: 32, height: 32 }).toDataURL();
         })();this.files.set(effective,pending);}
       }
       output[key]=await pending;

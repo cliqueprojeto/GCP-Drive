@@ -61,3 +61,12 @@ Não executado: a nova versão montando contas reais, a remontagem após ejetar/
 - `npm run build`, `scripts/smoke.mjs`, `scripts/disconnect-smoke.mjs` e `scripts/mount-smoke.mjs` passaram. A sintaxe da extensão Python foi verificada com `ast.parse`.
 
 Não executado: Nautilus e Nemo reais (sem Linux gráfico nesta máquina), temas sem os emblemas usados, os estados no painel com a conta real e macOS.
+
+## Streaming e estabilidade — 0.3.0-beta.5 (7 de novembro de 2026)
+
+- BigLinux (base Manjaro, KDE, kernel 6.18.55), Node 24.22.1, npm 11.16.0 e rclone 1.75.2. Sete montagens Google já ativas foram consultadas somente para leitura, em duas passadas por raiz, Meu Drive e Compartilhados comigo. As 42 listagens retornaram em 3–47 ms. O KDE KIO retornou a listagem de uma pasta compartilhada em 247 ms e 112 ms. Essas medidas incluem cache já existente e não reproduzem abertura a frio, miniaturas nem a interface do Dolphin.
+- `GCP_MOUNT_SMOKE_KIO=1 node scripts/mount-smoke.mjs` passou com FUSE real, configuração e cache descartáveis e origem local. Listagem de 200 entradas em 4,11/2,20 ms (primeira/repetida) e leitura de 4 MiB em 24,93/17,23 ms. Passaram leitura, gravação, cópia via KDE KIO, conferência dos bytes na origem, atualização de diretório pelo RC e desmontagem.
+- `npm run test:engine` e `npm run test:sync` passaram com rclone real e arquivos locais. `npm run test:desktop` passou em perfil isolado no KDE.
+- `npm run test:disconnect` passou em perfil isolado no KDE, com rclone e alias local. Listagem, renomeação, favorito e desconexão preservaram o arquivo de origem. O ensaio também exercitou o ícone genérico em caso de falha do ícone nativo.
+- Sonda RC em montagem FUSE isolada observou uma leitura de 1 MiB em andamento e a conclusão em RFC 3339 com deslocamento `-03:00`. Uma cópia local isolada via RC também confirmou o formato. O parser de Atividade agora aceita esse formato.
+- `npm run typecheck`, `npm test` (36 testes) e `npm run build` passaram com a cadeia de ferramentas fixada.

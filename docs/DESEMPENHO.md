@@ -83,3 +83,18 @@ O app lê os metadados do cache do motor (`vfsMeta`, rclone 1.75.2) de cada unid
 As pastas não recebem cor agregada, exceto quando há uma transferência em curso dentro delas. O painel "Meus arquivos" mostra esses estados nos três sistemas. No Linux, a extensão instalada pelo app no Nautilus e no Nemo mostra os mesmos estados como emblemas (`emblem-default`, `emblem-synchronizing`, `emblem-web`, `emblem-important`). A extensão requer `python3-nautilus` ou `nemo-python`. Depois da primeira instalação, feche e reabra o gerenciador de arquivos.
 
 O GCP-Drive não terá extensões nativas para Dolphin, Finder ou Explorador. Nesses gerenciadores, os estados aparecem só no painel do app.
+
+## Streaming e estabilidade no Linux — 0.3.0-beta.5
+
+A unidade montada é a rota padrão ao abrir uma conta conectada pela barra lateral no Linux. O painel ainda permite navegar em **Meus arquivos**. A montagem deixou de antecipar listagens no provedor e a leitura de metadados do cache sai do caminho crítico da Atividade. O kernel informa se o volume está anexado sem listar sua raiz. Uma montagem lenta pode passar a disponível em uma observação posterior.
+
+O Linux usa cache VFS esparso, com meta de 2 GiB por conta e expiração após 48 horas sem acesso. O rclone pode ultrapassar temporariamente a meta, por exemplo com arquivos abertos ou gravações pendentes. A redução de leituras em paralelo por arquivo diminui a quantidade de requisições quando várias montagens ou miniaturas disputam a rede. A velocidade de leitura sequencial de arquivos grandes pode cair em conexões de alta latência. [Documentação do cache de arquivos do rclone](https://rclone.org/commands/rclone_mount/#file-caching).
+
+| Alternativa | Comportamento relevante para o Linux |
+|---|---|
+| Insync | Sincronização seletiva de cópias locais. A equipe descreve essa abordagem como diferente de streaming sob demanda no explorador. [Insync](https://www.insynchq.com/syncing-superpowers), [resposta da equipe](https://forums.insynchq.com/t/streaming-instead-of-syncing/19796). |
+| Grive2 | Sincroniza uma árvore local, com seleção de subdiretórios e disparo por inotify/systemd. [Grive2](https://github.com/vitalif/grive2). |
+| KIO GDrive | Acesso ao Google Drive em aplicativos KDE por `gdrive:/`. É útil no Dolphin, mas o endereço KIO difere de um caminho de unidade comum para programas externos. [KDE](https://apps.kde.org/kio_gdrive/). |
+| google-drive-ocamlfuse | Montagem Linux especializada em Google Drive, com múltiplas contas. É a alternativa mais próxima para um ensaio Google-only. [google-drive-ocamlfuse](https://github.com/astrada/google-drive-ocamlfuse). |
+
+Mantivemos o rclone nesta beta para preservar a montagem multiprovedor e o cache de gravações existente. A comparação acima é de arquitetura e escopo. Os tempos medidos são os do GCP-Drive em [VALIDACAO.md](VALIDACAO.md).

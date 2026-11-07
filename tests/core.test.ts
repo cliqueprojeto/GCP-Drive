@@ -125,6 +125,9 @@ test("mount tuning keeps listings until polled providers report changes and expi
   assert.equal(value(drive, "--dir-cache-time"), "168h");
   assert.equal(value(drive, "--poll-interval"), "15s");
   assert.equal(value(drive, "--attr-timeout"), "10s");
+  assert.equal(value(drive, "--vfs-cache-mode"), "full");
+  assert.equal(value(drive, "--vfs-cache-max-size"), "2G");
+  assert.equal(value(drive, "--vfs-read-chunk-streams"), "0");
   assert.ok(drive.includes("--vfs-fast-fingerprint"));
   assert.equal(drive.includes("--network-mode"), false);
   const mega = mountArgs({ ...base, provider: "mega" }, "M", "C", undefined, "linux");

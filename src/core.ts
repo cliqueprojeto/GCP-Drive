@@ -43,6 +43,7 @@ export function mountArgs(
   remote = `${account.id}:`,
   platform: NodeJS.Platform = process.platform,
 ): string[] {
+  const linux = platform === "linux";
   const polled = changePolling.has(account.provider);
   return [
     "mount",
@@ -53,19 +54,19 @@ export function mountArgs(
     "--cache-dir",
     path.join(cache, account.id),
     "--vfs-cache-max-size",
-    "10G",
+    linux ? "2G" : "10G",
     "--vfs-cache-min-free-space",
     "2G",
     "--vfs-cache-max-age",
-    "336h",
+    linux ? "48h" : "336h",
     // Size and modification time identify cached data without hashing it again on open.
     "--vfs-fast-fingerprint",
     "--buffer-size",
-    "4M",
+    linux ? "2M" : "4M",
     "--vfs-read-chunk-size",
     "16M",
     "--vfs-read-chunk-streams",
-    "4",
+    linux ? "0" : "4",
     "--vfs-write-back",
     "5s",
     // Listings stay valid until the provider reports a change; unpolled providers expire them.

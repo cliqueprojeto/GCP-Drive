@@ -54,7 +54,7 @@ try {
   await close(app);
   const config = path.join(root, "rclone.conf");
   await writeFile(config, "", { mode: 0o600 });
-  const binary = path.resolve("vendor/win32-x64/rclone.exe");
+  const binary = path.resolve("vendor", `${process.platform}-${process.arch}`, process.platform === "win32" ? "rclone.exe" : "rclone");
   const engineEnv = {
     ...Object.fromEntries(
       Object.entries(env).filter(
@@ -124,7 +124,10 @@ try {
     .getByText("Contrato de teste.txt", { exact: true })
     .waitFor({ timeout: 10000 });
   const icons = await page.evaluate(()=>window.gcpDrive.call('fileIcons',{keys:['folder','file:.txt']}));
-  assert.equal(icons.ok,true);assert.match(icons.value['file:.txt'],/^data:image\//);
+  assert.equal(icons.ok, true);
+  if (process.platform === "linux" && icons.value["file:.txt"] === "")
+    await page.locator(".system-icon").filter({ hasText: "📄" }).first().waitFor();
+  else assert.match(icons.value["file:.txt"], /^data:image\//);
   await page.getByLabel('Visualizar arquivos').selectOption('gallery');
   await page.locator('.layout-gallery').waitFor();
   await mkdir('.local',{recursive:true});await page.screenshot({path:'.local/new-file-browser.png'});

@@ -1,5 +1,5 @@
 import {UserError,userMessage} from './user-error.ts';
-import { access, constants, readdir, stat } from "node:fs/promises";
+import { access, constants, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
@@ -142,9 +142,28 @@ export async function logicalDrives(): Promise<string[]> {
     throw new UserError("Não foi possível consultar as unidades do Windows.");
   return value;
 }
-/** The RC server answers before the volume is attached; a mounted folder is on a different device than its parent. */
+export function linuxRcloneMounted(mountInfo: string, target: string): boolean {
+  return mountInfo.split("\n").some((entry) => {
+    const [mount, filesystem] = entry.split(" - ");
+    if (filesystem?.split(" ", 1)[0] !== "fuse.rclone") return false;
+    const mountPath = mount.split(" ")[4]?.replace(
+      /\\([0-7]{3})/g,
+      (_, octal: string) => String.fromCharCode(parseInt(octal, 8)),
+    );
+    return mountPath === target;
+  });
+}
+
+/** The RC server answers before the volume is attached. On Linux, consult the kernel without touching the FUSE root. */
 export async function mountVisible(target: string): Promise<boolean> {
   try {
+    if (process.platform === "linux") {
+      const parent = await realpath(path.dirname(target));
+      return linuxRcloneMounted(
+        await readFile("/proc/self/mountinfo", "utf8"),
+        path.join(parent, path.basename(target)),
+      );
+    }
     if (process.platform === "win32") {
       await access(target);
       return true;

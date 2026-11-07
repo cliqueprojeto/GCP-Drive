@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chooseDriveLetter, pendingWrites } from "../src/mount-platform.ts";
+import { chooseDriveLetter, linuxRcloneMounted, pendingWrites } from "../src/mount-platform.ts";
+test("Linux mount readiness matches the decoded rclone mountpoint exactly", () => {
+  const mountInfo = String.raw`32 21 0:29 / /mnt/folder\040name\134one rw - fuse.rclone source rw
+33 21 0:30 / /mnt/folder rw - ext4 /dev/sda rw`;
+  assert.equal(linuxRcloneMounted(mountInfo, "/mnt/folder name\\one"), true);
+  assert.equal(linuxRcloneMounted(mountInfo, "/mnt/folder"), false);
+  assert.equal(linuxRcloneMounted(mountInfo, "/mnt/folder name\\one/file"), false);
+});
 test("Windows drive selection preserves an available preference and never takes an occupied letter", () => {
   assert.equal(chooseDriveLetter(["C:\\", "G:\\", "I:\\"], "P:"), "P:");
   assert.equal(chooseDriveLetter(["C:\\", "G:\\"], "G:"), "H:");

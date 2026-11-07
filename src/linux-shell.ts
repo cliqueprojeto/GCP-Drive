@@ -28,8 +28,9 @@ export async function writeLinuxShellState(home:string,executable:string,mounts:
   const cache:Record<string,string>={};let count=0;
   const complete:string[]=[];
   for(const {state:mount,cache:scan} of mounts){
+    if(mount.phase!=='running')continue;
     for(const item of mount.transfers??[])status[path.join(mount.path,item.path)]=item.phase;
-    if(mount.phase!=='running'||!scan)continue;
+    if(!scan)continue;
     let truncated=false;
     for(const [key,value] of scan.states){if(count>=shellEntries){truncated=true;break;}cache[path.join(mount.path,...key.split('/'))]=value;count++;}
     if(scan.complete&&!truncated)complete.push(mount.path);

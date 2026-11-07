@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ListingCache} from '../src/listing-cache.ts';
-import {mountTelemetry} from '../src/mount-telemetry.ts';
+import {mountTelemetry, TransferProgress} from '../src/mount-telemetry.ts';
 import {FolderSyncManager} from '../src/folder-sync.ts';
 import type {FolderPlan} from '../src/contracts.ts';
 import {assertCleanCache} from '../src/cache-safety.ts';
@@ -37,6 +37,33 @@ test('telemetry projects real queue and transfers without claiming every file is
   const value=mountTelemetry({diskCache:{bytesUsed:800,files:3,uploadsQueued:1,uploadsInProgress:1,erroredFiles:0}},{transferring:[{name:'Meu Drive/Contrato.pdf',bytes:40,size:100,speed:12},{name:'../outside',bytes:4}]},{queue:[{name:'Meu Drive/Contrato.pdf',size:100,uploading:true},{name:'Meu Drive/Nota.txt',size:90,tries:2}]});
   assert.equal(value.transfers?.length,2);assert.equal(value.transfers?.[0].bytes,40);assert.equal(value.transfers?.[1].phase,'problem');assert.equal(value.cache?.bytes,800);
   assert.deepEqual(mountTelemetry({}, {}, {}),{transfers:[],cache:undefined});
+});
+test('real RC completion timestamps expire and open work takes precedence',()=>{
+  const row = {name:'fixture.bin',bytes:1024,size:1024,checked:false,error:'',what:'transferring',completed_at:new Date().toISOString()};
+  const completed = {transferred:[
+    row,
+    {...row,name:'partial.bin',bytes:512},
+    {...row,name:'old.bin',completed_at:new Date(Date.now()-120_000).toISOString()},
+  ]};
+  assert.deepEqual(mountTelemetry({}, {}, {}, completed).transfers.map(item=>[item.path,item.phase]),[['fixture.bin','complete']]);
+  const active = mountTelemetry({}, {transferring:[{name:'fixture.bin',bytes:0,size:1024}]}, {}, completed);
+  assert.deepEqual(active.transfers.map(item=>[item.path,item.phase]),[['fixture.bin','transferring']]);
+});
+test('open transfers without byte progress go into waiting and recover without synthetic completion',()=>{
+  const tracker = new TransferProgress();
+  const sample = (bytes:number) => mountTelemetry({}, {transferring:[{name:'fixture.bin',bytes,size:1024,speed:8}]}, {}).transfers;
+  assert.equal(tracker.observe(sample(0),0),false);
+  const stalled = sample(0);
+  assert.equal(tracker.observe(stalled,30_000),false);
+  assert.equal(stalled[0].phase,'waiting');
+  assert.equal(stalled[0].speed,0);
+  const resumed = sample(5);
+  assert.equal(tracker.observe(resumed,32_000),true);
+  assert.equal(resumed[0].phase,'transferring');
+  tracker.observe([],35_000);
+  const reopened = sample(5);
+  tracker.observe(reopened,70_000);
+  assert.equal(reopened[0].phase,'transferring');
 });
 test('removing a sync plan waits for finalization and preserves user data and recovery state',async()=>{
   const plans:FolderPlan[]=[{id:'sync-a',accountId:'a',localPath:'local',remotePath:'remote',initialized:true,enabled:false}];

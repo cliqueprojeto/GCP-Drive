@@ -497,17 +497,18 @@ function App() {
         setStartup(s.preferences.startAtLogin);
       })
       .catch((e) => setError(userMessage(e)));
-    // A hidden window (tray) does not need snapshots; the engine keeps observing in the main process.
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void refresh().catch(() => {});
-    }, 2500);
-    const visible = () => {
-      if (document.visibilityState === "visible") void refresh().catch(() => {});
+    // Keep at most one periodic snapshot in flight. The engine observes mounts in the main process.
+    let polling = false;
+    const poll = () => {
+      if (polling || document.visibilityState !== "visible") return;
+      polling = true;
+      void refresh().catch(() => {}).finally(() => { polling = false; });
     };
-    document.addEventListener("visibilitychange", visible);
+    const timer = setInterval(poll, 2500);
+    document.addEventListener("visibilitychange", poll);
     return () => {
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", visible);
+      document.removeEventListener("visibilitychange", poll);
     };
   }, []);
   useEffect(() => {
@@ -587,6 +588,21 @@ function App() {
   const actualPage=Math.min(pageNumber,pageCount-1);
   const current = snapshot?.preferences.accounts.find((a) => a.id === account);
   const mounts = snapshot?.mounts || [];
+  function usesNativeExplorer(id: string) {
+    return snapshot?.platform === "linux" && mounts.some(mount => mount.accountId === id && mount.phase === "running");
+  }
+  async function openAccount(id: string) {
+    if (usesNativeExplorer(id)) {
+      setError("");
+      try {
+        await call("open", { accountId: id, path: "" });
+      } catch (error) {
+        setError(userMessage(error));
+      }
+      return;
+    }
+    await browse(id);
+  }
   const active = mounts.filter((m) => m.phase === "running").length;
   const problems = mounts.filter((m) => m.phase === "error").length;
   function connect() {
@@ -679,7 +695,7 @@ function App() {
         </div>
         <div className="side-accounts">
           {snapshot?.preferences.accounts.map((a) => (
-            <button key={a.id} onClick={() => void browse(a.id)}>
+            <button key={a.id} title={usesNativeExplorer(a.id) ? t.open : t.files} onClick={() => void openAccount(a.id)}>
               <ProviderMark type={a.provider} />
               <span>{a.label}</span>
               <i className={`dot ${stat(a.id)}`} />
