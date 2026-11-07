@@ -1,8 +1,13 @@
 name: Test packages
 on:
   workflow_dispatch:
+    inputs:
+      draft_tag:
+        description: Stage installers on an existing draft prerelease instead of storing Actions artifacts
+        required: false
+        type: string
 permissions:
-  contents: read
+  contents: write
 jobs:
   package:
     name: Package (${{ matrix.name }})
@@ -28,6 +33,8 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -56,6 +63,7 @@ jobs:
       - run: ${{ matrix.command }}
       - run: node scripts/package-checksums.mjs
       - uses: actions/upload-artifact@v4
+        if: inputs.draft_tag == ''
         with:
           name: gcp-drive-${{ matrix.name }}
           path: |
@@ -68,4 +76,24 @@ jobs:
             release/LEIA-ME-TESTES.txt
           if-no-files-found: error
           retention-days: 14
-      # Test artifacts: no automatic public release, installation or claim of provider certification.
+      - name: Stage checksummed packages on the matching draft
+        if: inputs.draft_tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_TAG: ${{ inputs.draft_tag }}
+          GROUP: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          [[ "$DRAFT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]
+          test "$DRAFT_TAG" = "v$(node -p "require('./package.json').version")"
+          test "$(gh release view "$DRAFT_TAG" --json isDraft,isPrerelease,targetCommitish --jq '[.isDraft,.isPrerelease,.targetCommitish] | join(" ")')" = "true true $GITHUB_SHA"
+          cd release
+          if command -v sha256sum >/dev/null; then sha256sum --check SHA256SUMS; else shasum -a 256 -c SHA256SUMS; fi
+          mv SHA256SUMS "SHA256SUMS-$GROUP"
+          shopt -s nullglob
+          packages=(*.exe *.deb *.rpm *.dmg *.AppImage)
+          test "${#packages[@]}" -gt 0
+          if [[ "$GROUP" == windows-x64 ]]; then packages+=(LEIA-ME-TESTES.txt); fi
+          gh release upload "$DRAFT_TAG" "${packages[@]}" "SHA256SUMS-$GROUP" --clobber
+      # Staging only: publication requires independent verification of all packages.
