@@ -115,3 +115,23 @@ Ensaio de gravação em conta Google real, autorizado pelo usuário, restrito a 
 Instalação: o usuário instalou `gcp-drive-0.5.0-1-x86_64.pkg.tar.zst` com `pacman -U` sobre a 0.4.3. O serviço antigo só encerrou com SIGKILL do systemd, e o novo, iniciado enquanto as pastas ainda estavam presas, ficou com o erro de montagem até ser reiniciado. Depois do reinício as cinco contas montaram em `~/GCP-Drive` sem novo login e `Meu Drive` listou 201 itens em 7 ms. A revisão 0.5.0-2 passa a repetir a montagem a cada 10 s e a interface reinicia o serviço que tenha parado; essas duas mudanças passaram em `go vet` e `go test -race`, mas não foram exercitadas numa atualização real. O usuário relatou uso fluido da 0.5.0-1 instalada.
 
 Não executado: conflito de versões e falha de rede durante envio em conta real, limites de banda com tráfego real, edição por LibreOffice ou outro programa gráfico, instalação dos pacotes `.deb` e `.rpm`, atualização a partir da 0.4.3, Dolphin/Nautilus/Nemo com a unidade nova, bandeja, login OAuth, Debian/Ubuntu e Fedora. O Drive simulado não reproduz latência, cota nem erros do Google. Não há versão para Windows ou macOS deste motor.
+
+## Motor nativo para Windows — fase 1 e sonda da Cloud Filter API (13 de novembro de 2026)
+
+Ainda não existe versão para Windows. O que foi feito é a preparação do código e uma sonda da API do sistema.
+
+Executado no BigLinux, Go 1.27.4, depois de separar o código por sistema (`*_linux.go`, `*_windows.go`):
+
+- `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado no Linux, com o mesmo teste FUSE contra o Google Drive simulado descrito acima.
+- `GOOS=windows go vet ./...`, `GOOS=windows go build` e a compilação dos testes para Windows concluíram sem erros. No Windows a pasta da conta ainda devolve "não faz parte desta compilação"; nada além da compilação foi verificado nesse binário.
+
+Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100, plataforma Cloud Files build 26100 revisão 33648, driver `cldflt` em execução), workflow `Native engine (Windows)`, execução 43548953459, com `native/cfapi` chamando `cldapi.dll` em Go puro, sem cgo:
+
+- `CfRegisterSyncRoot` e `CfConnectSyncRoot` numa pasta temporária, com conteúdo servido da memória do teste (sem Google Drive, nem o simulado).
+- Preenchimento de pastas sob demanda (`FETCH_PLACEHOLDERS`) para a raiz e uma subpasta, lidas por um segundo processo; uma pasta já preenchida não foi pedida de novo. O Windows não faz esse pedido quando quem lista é o próprio processo provedor.
+- Leitura de 4 KiB de um arquivo de 1,3 MB pediu ao provedor dois trechos de 4 KiB, não o arquivo inteiro. A leitura completa conferiu byte a byte; a segunda leitura completa não gerou nenhum pedido.
+- `CfDehydratePlaceholder` liberou o conteúdo e a leitura seguinte voltou a pedir os dados. `CfConvertToPlaceholder` e `CfSetInSyncState` funcionaram num arquivo criado dentro da pasta.
+
+Três execuções anteriores da sonda falharam por erros do próprio teste (listagem feita pelo processo provedor; cancelamento normal de um pedido tratado como falha; progresso informado depois de o pedido terminar), corrigidos em seguida.
+
+Não executado: qualquer coisa no Explorer (ícones de estado, painel de navegação, menus), registro pelo `StorageProviderSyncRootManager`, Windows 10, Windows em ARM, o motor (mapa, cache de blocos, fila de envio) atendendo um sync root, gravação, instalador, contas Google reais. O runner é um Windows Server sem sessão gráfica de usuário comum; o resultado não garante o mesmo comportamento no Windows 10/11 do usuário.
