@@ -238,9 +238,13 @@ func (m *Mount) prune(path string) bool {
 		} else if state.Placeholder {
 			// Without content there is nothing to lose; with content, it must be the version the Drive has.
 			copyOfDrive := attributes(info)&attributeRecallOnDataAccess != 0
-			if _, content, _, version, ok := parseIdentity(state.Identity); ok && !copyOfDrive && state.InSync {
+			if kind, content, _, version, ok := parseIdentity(state.Identity); ok && !copyOfDrive && state.InSync {
 				it := m.meta.item(content)
-				copyOfDrive = it != nil && !it.Local && version == it.MD5 && sameContent(info, it)
+				if it != nil && kind == kindLink {
+					copyOfDrive = info.Size() == int64(len(linkContent(it)))
+				} else {
+					copyOfDrive = it != nil && !it.Local && version == it.MD5 && sameContent(info, it)
+				}
 			}
 			if copyOfDrive && os.Remove(full) == nil {
 				continue
