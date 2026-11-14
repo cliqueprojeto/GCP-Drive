@@ -18,7 +18,7 @@ As contas ficam em `~/.config/opengdrive/accounts`, no mesmo formato das versõe
 
 ## Separação por sistema
 
-O cliente da API, o mapa, o cache de blocos, a fila de envio, as contas e o serviço não dependem do sistema. O que é próprio de cada um fica em arquivos com sufixo: `fs.go`, `mount_linux.go` e `os_linux.go` (FUSE, pastas XDG, trava de sessão) e `mount_windows.go` e `os_windows.go` (pastas do perfil, regras de nomes do NTFS). A versão para Windows está em construção: o binário compila, mas ainda não mostra a pasta da conta. `cfapi/` contém as chamadas à Cloud Filter API do Windows (`cldapi.dll`) em Go puro e um teste que só roda no Windows, pelo workflow `Native engine (Windows)`.
+O cliente da API, o mapa, o cache de blocos, a fila de envio, as contas e o serviço não dependem do sistema. O que é próprio de cada um fica em arquivos com sufixo: `fs.go`, `mount_linux.go` e `os_linux.go` (FUSE, pastas XDG, trava de sessão) e `mount_windows.go` e `os_windows.go` (pastas do perfil, regras de nomes do NTFS). No Windows (`mount_windows.go`), cada conta é uma pasta sob demanda da Cloud Filter API em `%USERPROFILE%\GCP-Drive\<e-mail>`, sem letra de unidade e sem driver de terceiros. As pastas são preenchidas a partir do mapa na primeira abertura, o conteúdo vem do cache de blocos e as alterações remotas são escritas nas pastas já exibidas. Documentos do Google aparecem como atalhos `.url`. Por enquanto é somente leitura: o que for alterado na pasta não é enviado. Faltam o painel, a integração com o Explorer e o instalador. `cfapi/` contém as chamadas a `cldapi.dll` em Go puro; os testes de Windows rodam pelo workflow `Native engine (Windows)`.
 
 ## Diferenças em relação à 0.4.x
 

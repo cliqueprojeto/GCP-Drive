@@ -135,3 +135,20 @@ Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100, plataf
 Três execuções anteriores da sonda falharam por erros do próprio teste (listagem feita pelo processo provedor; cancelamento normal de um pedido tratado como falha; progresso informado depois de o pedido terminar), corrigidos em seguida.
 
 Não executado: qualquer coisa no Explorer (ícones de estado, painel de navegação, menus), registro pelo `StorageProviderSyncRootManager`, Windows 10, Windows em ARM, o motor (mapa, cache de blocos, fila de envio) atendendo um sync root, gravação, instalador, contas Google reais. O runner é um Windows Server sem sessão gráfica de usuário comum; o resultado não garante o mesmo comportamento no Windows 10/11 do usuário.
+
+## Motor nativo para Windows — fase 2, pasta da conta somente leitura (14 de novembro de 2026)
+
+Ainda não há instalador nem painel para Windows, e alterações feitas na pasta não são enviadas ao Drive.
+
+Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100), workflow `Native engine (Windows)`, execução 43565976823. O teste `TestEngineWindows` liga o motor (mapa, cache de blocos, cliente da API) a um sync root em pasta temporária contra o Google Drive simulado em memória, e lê a pasta por um segundo processo:
+
+- Raiz com `Meu Drive`, `Compartilhados comigo` e `Drives compartilhados`; `Meu Drive` com a pasta e o documento Google como atalho `Planilha.url`, cujo conteúdo traz o endereço do documento. Nenhuma listagem baixou conteúdo.
+- Os primeiros 4 KiB de um arquivo de 6 blocos custaram 1 requisição de conteúdo; a leitura completa conferiu byte a byte com 3 requisições no total.
+- Depois de parar e religar o motor, a releitura conferiu sem nenhuma requisição.
+- Alterações remotas entregues ao mapa foram escritas na pasta já exibida: arquivo novo apareceu e foi lido; arquivo editado remotamente passou a devolver o conteúdo novo; arquivo enviado à lixeira sumiu. O motor não registrou nenhuma falha.
+
+Duas execuções anteriores falharam na parte das alterações remotas: o Windows informa o caminho da pasta como o programa o escreveu (com nomes curtos `RUNNER~1`), e o motor não o reconhecia. Corrigido.
+
+No Linux, `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado depois dessas mudanças. O teste FUSE precisou ser iniciado por `systemd-run --user`, porque o terminal usado na sessão não permitia `fusermount3`.
+
+Não executado: Explorer (ícones, painel de navegação, progresso, cancelamento por interface), cancelamento de leitura em andamento, pastas grandes (o envio em lotes de 2.000 entradas não foi exercitado), `Compartilhados comigo` e drives compartilhados com conteúdo, o feed `changes.list` de verdade (as alterações foram injetadas direto no mapa), renomeação remota, falha de rede, serviço e socket de controle no Windows, limite de cache, Windows 10, ARM, contas Google reais. O conteúdo baixado fica no próprio arquivo e também no cache de blocos, até o limite configurado do cache; "Liberar espaço" ainda não existe.
