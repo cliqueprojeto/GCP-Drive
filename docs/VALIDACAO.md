@@ -187,3 +187,21 @@ Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100), workf
 Executado no BigLinux: a página do painel (`native/panel`) foi aberta num navegador com dados de exemplo servidos por um programa de teste, não pelo serviço; conferidos em tema escuro o cabeçalho com velocidades, os cartões de conta (estado, mapa, fila de envio, cache, off-line, uso no Google, envio em andamento, atividade recente) e os botões. `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado no Linux depois dessas mudanças.
 
 Não executado: a aparência no Explorer (entrada no painel de navegação, ícones de estado, itens "Sempre manter neste dispositivo" e "Liberar espaço" no menu); o ícone ao lado do relógio e seu menu; a janela do painel aberta pelo Microsoft Edge e a alternativa pelo navegador padrão; os botões do painel contra o serviço (adicionar conta, pausar, limpar cache, desconectar, salvar configurações); tema claro; início do serviço pelo atalho do aplicativo e o socket de controle no Windows; login OAuth no Windows; manter uma pasta inteira; liberação automática pelo Sensor de Armazenamento; Windows 10; contas Google reais. O ícone da bandeja é fixo, sem animação de atividade. O limite de cache vale só para os blocos de leitura; o espaço dos arquivos abertos é devolvido por "Liberar espaço" ou pelo Sensor de Armazenamento, não pelo aplicativo.
+
+## Motor nativo para Windows — fase 5, instalador (14 de novembro de 2026)
+
+O instalador foi gerado e exercitado no runner, mas não ficou disponível para download: o envio do arquivo como artefato do Actions foi recusado por cota de armazenamento de artefatos da conta esgotada (o repositório não tem nenhum artefato guardado). Nenhuma versão foi publicada.
+
+Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100), workflow `Native engine (Windows)`, execução 43599914249:
+
+- `go vet` e os testes das fases anteriores aprovados. `TestEngineWindows` ganhou a retirada da conta do computador, que é o que desconectar e desinstalar fazem: as cópias do que está no Drive foram removidas, um arquivo que só existia no computador ficou na pasta como arquivo comum e legível, a pasta que o contém deixou de ser placeholder e o registro da conta no Explorer foi desfeito.
+- O serviço foi compilado sem console (`-H=windowsgui`) e o NSIS gerou `GCP-Drive-0.5.0-instalador.exe` (SHA-256 `DCCCD392A78F1375027A979C6C532C075D595E27A54BEF83C61A81E16E0CC6D1`), sem cadastro do Google dentro.
+- Instalação silenciosa por usuário: programa em `%LOCALAPPDATA%\Programs\GCP-Drive`, desinstalador, atalho no menu Iniciar, entrada em "Aplicativos instalados" e início com o Windows (`gcp-drive.exe daemon` na chave `Run` do usuário). Um `google-oauth.json` de teste colocado ao lado do instalador foi copiado para a instalação.
+- O serviço instalado iniciou e respondeu a `status` pelo socket de controle. Instalar por cima com o serviço em execução encerrou o serviço e substituiu o programa; o serviço voltou a responder depois.
+- Desinstalação silenciosa: serviço encerrado, programa, cadastro, atalho, início automático e entrada de aplicativos removidos, cache removido.
+
+A execução anterior, 43599759255, falhou no teste do motor antes de chegar ao instalador: o atalho `.url` de um documento Google já aberto não era reconhecido como cópia do Drive e ficava na pasta depois da retirada da conta. Corrigido.
+
+No Linux, `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado depois dessas mudanças.
+
+Não executado: o instalador com janelas (páginas, pergunta sobre remover contas, "Abrir o GCP-Drive" ao final); o aviso do SmartScreen para instalador sem assinatura digital; a desinstalação com contas conectadas pelo desinstalador (a retirada da conta foi testada pelo motor, não pelo instalador); início real no login do Windows; atualização com arquivos na fila de envio; Windows 10; instalação por um usuário sem direitos de administrador (o runner é administrador). O ícone do executável depende de `windres` no runner e não foi conferido.

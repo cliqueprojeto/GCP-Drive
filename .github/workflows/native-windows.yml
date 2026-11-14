@@ -41,6 +41,8 @@ jobs:
       - name: Install, upgrade and uninstall
         run: windows\test-installer.ps1
       - uses: actions/upload-artifact@v4
+        # The account's artifact storage may be full; the checks above do not depend on the upload.
+        continue-on-error: true
         with:
           name: gcp-drive-windows-installer
           path: native/windows/build/GCP-Drive-*-instalador.exe
