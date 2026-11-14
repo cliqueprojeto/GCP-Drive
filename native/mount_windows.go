@@ -27,6 +27,7 @@ var reconcileDelay = 2 * time.Second
 // populated remembers which ones exist on disk so remote changes can be written into them.
 type platform struct {
 	conn   *cfapi.Connection
+	root   string // the account's folder in its long form
 	prefix string // the root as callbacks name it: without the volume
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -106,7 +107,7 @@ func (m *Mount) attach() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.plat.mu.Lock()
 	m.plat.ctx, m.plat.cancel = ctx, cancel
-	m.plat.prefix = strings.TrimPrefix(root, filepath.VolumeName(root))
+	m.plat.root, m.plat.prefix = root, strings.TrimPrefix(root, filepath.VolumeName(root))
 	m.plat.populated, m.plat.dirty = map[string]string{}, map[string]bool{}
 	m.plat.readers, m.plat.fetches = map[*cfile]*reader{}, map[int64][]*fetchJob{}
 	_ = readJSON(m.populatedPath(), &m.plat.populated)
@@ -224,13 +225,16 @@ func (m *Mount) fetchPlaceholders(r *cfapi.Request, _ string) {
 				break
 			}
 		}
-		if rel, ok := m.relative(r.Path); ok {
-			m.plat.mu.Lock()
-			m.plat.populated[rel], m.plat.changed = dir, true
-			// What changed while the listing was on its way is written by the next reconciliation.
-			m.plat.dirty[dir] = true
-			m.plat.mu.Unlock()
+		rel, ok := m.relative(r.Path)
+		if !ok {
+			m.problem("Listar pasta", r.Path, errors.New("O Windows informou um caminho fora da pasta desta conta."))
+			return
 		}
+		m.plat.mu.Lock()
+		m.plat.populated[rel], m.plat.changed = dir, true
+		// What changed while the listing was on its way is written by the next reconciliation.
+		m.plat.dirty[dir] = true
+		m.plat.mu.Unlock()
 	}()
 }
 
@@ -396,7 +400,7 @@ func onlyPlaceholders(path string) bool {
 // new entries appear, removed ones go away and changed files give up their old content.
 // Files that are not placeholders were created on this computer and are left alone.
 func (m *Mount) reconcile(rel, dir string) {
-	path := filepath.Join(m.path, rel)
+	path := filepath.Join(m.plat.root, rel)
 	// The provider's own process sees the folder as it is on disk, without asking itself to fill it.
 	onDisk, err := os.ReadDir(path)
 	if err != nil {
@@ -464,10 +468,11 @@ func (m *Mount) reconcile(rel, dir string) {
 		list = append(list, placeholderOf(e))
 	}
 	if err := cfapi.CreatePlaceholders(path, list); err != nil {
-		for _, p := range list {
-			if p.Err != nil {
-				m.problem("Atualizar pasta", p.Name, p.Err)
-			}
+		m.problem("Atualizar pasta", filepath.Base(path), err)
+	}
+	for _, p := range list {
+		if p.Err != nil {
+			m.problem("Atualizar pasta", p.Name, p.Err)
 		}
 	}
 }

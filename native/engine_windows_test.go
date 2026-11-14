@@ -143,6 +143,15 @@ func TestEngineWindows(t *testing.T) {
 	defer func() {
 		if t.Failed() {
 			t.Logf("problems recorded by the engine: %q", problems())
+			m.plat.mu.Lock()
+			t.Logf("root %q prefix %q populated %q dirty %v", m.plat.root, m.plat.prefix, m.plat.populated, m.plat.dirty)
+			m.plat.mu.Unlock()
+			entries, err := os.ReadDir(filepath.Join(m.plat.root, nameMy, "Projetos"))
+			for _, e := range entries {
+				info, _ := e.Info()
+				t.Logf("on disk: %q size %d attributes 0x%X", e.Name(), info.Size(), attributes(info))
+			}
+			t.Logf("on disk error: %v; listing in the map: %d entries", err, len(m.meta.listing("D1")))
 		}
 	}()
 
