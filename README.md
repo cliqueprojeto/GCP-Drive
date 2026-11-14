@@ -1,88 +1,135 @@
 # GCP-Drive
 
-**Suas nuvens, no seu computador.** Cliente desktop multicloud com interface gráfica, identidade roxa e software livre sob [GPL-3.0](LICENSE).
+**O seu Google Drive como uma pasta do computador, no Linux e no Windows.** Os arquivos aparecem na hora e só são baixados quando você abre. Software livre sob a licença [GPL-3.0](LICENSE), com o código aberto para quem quiser conferir.
 
 Desenvolvido por **Bruno Albertini | [Gestão Cultural Pro](https://gestaoculturalpro.com.br)**.
 
-## Download
+![Painel do GCP-Drive no Windows, com dados de exemplo](docs/images/painel-windows-exemplo.png)
 
-[Baixe os instaladores na página de versões](https://github.com/cliqueprojeto/GCP-Drive/releases).
+*Painel do Windows com contas e arquivos de exemplo.*
 
-| Sistema | Arquitetura | Pacotes |
-|---|---|---|
-| Windows | x64 | EXE |
-| Linux | x64 | DEB, RPM e AppImage |
-| Arch Linux | x86_64 | Pacote pacman e receita compatível com AUR — [instalação](docs/ARCH-LINUX.md) |
-| macOS Intel | x64 | DMG |
-| macOS Apple Silicon, incluindo M1 | arm64 | DMG |
+## Baixar
 
-**0.3.0-beta.2 é uma prévia para testes.** Compilação e testes automatizados não substituem homologação com contas reais, aplicativos externos e gerenciadores de arquivos. Consulte [requisitos](docs/REQUISITOS.md) e [validação](docs/VALIDACAO.md). Os aplicativos ainda não possuem assinatura de distribuição Windows nem assinatura/notarização Apple.
+[**Baixe a versão 0.5.0 na página de versões**](https://github.com/cliqueprojeto/GCP-Drive/releases/latest).
 
-## Funcionalidades
+| Sistema | Arquivo |
+|---|---|
+| Windows 10 e 11 (64 bits) | `GCP-Drive-0.5.0-instalador.exe` |
+| Debian, Ubuntu, Mint | `gcp-drive_0.5.0-3_amd64.deb` |
+| Fedora | `gcp-drive-0.5.0-3.x86_64.rpm` |
+| Arch, Manjaro, BigLinux | `gcp-drive-0.5.0-3-x86_64.pkg.tar.zst` |
 
-- Google Drive, OneDrive e Dropbox com autorização pelo navegador; MEGA e Proton Drive com autenticação direta. **Proton Drive é experimental**, com possíveis incompatibilidades de autenticação.
-- Múltiplas contas, com identidade, configuração e cache separados; alteração do nome sem refazer o login.
-- Streaming por unidades virtuais com cache local, usando rclone como motor. Abertura e edição em aplicativos instalados pelo caminho montado.
-- Google: composição de Meu Drive, Compartilhados comigo e drives compartilhados acessíveis à conta; atualização pela interface.
-- Navegação em abas, Detalhes/Lista/Galeria, classificação, pesquisa, renomeação e download. Compartilhamento abre o provedor para escolher permissões.
-- Favoritos com nomes reais, classificações, busca e remoção rápida.
-- Página própria de contas e armazenamento; inspeção e limpeza protegida do cache, com bloqueio quando há gravações pendentes.
-- Sincronização bidirecional de pastas do computador, prévia antes da primeira execução, pausa e remoção do vínculo sem excluir arquivos de origem.
-- Histórico de atividades, indicadores de transferência e bandeja animada. Estado desconhecido não é apresentado como sincronização comprovada.
-- Integração Explorer por conta e ações de contexto; extensão opcional Nautilus/Nemo quando o ambiente oferece os bindings necessários. Homologação gráfica por sistema pendente.
-- Temas claros/escuros e importação de [temas JSON somente de cores](docs/TEMA-EXEMPLO.json).
-- Atualizações pelo canal público GitHub, com verificação SHA-256 antes de oferecer a instalação.
-- PT-BR principal, opções inglês/espanhol. Fluxos novos ainda passam por revisão de tradução completa.
+Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 
-## Interface
+## O que o GCP-Drive faz
 
-Capturas com dados fictícios de teste:
+### No Linux e no Windows
 
-![Favoritos em detalhes](docs/images/favoritos-detalhes.png)
+- **Várias contas do Google ao mesmo tempo.** Cada conta vira uma pasta dentro de `GCP-Drive`, na sua pasta pessoal.
+- **Arquivos sob demanda.** A pasta mostra tudo o que está no Drive sem ocupar espaço; o arquivo é baixado quando você abre, e só as partes necessárias. Vídeos e arquivos grandes começam a abrir sem esperar o download inteiro.
+- **Meu Drive, Compartilhados comigo e drives compartilhados** na mesma pasta da conta.
+- **Mapa da conta.** O GCP-Drive mapeia as pastas uma vez e depois acompanha só as alterações; com o mapa pronto, as pastas abrem sem esperar a internet.
+- **Cache de leitura.** O que já foi aberto fica guardado no computador: a segunda abertura é imediata. O tamanho do cache é ajustável e pode ser limpo pelo painel.
+- **Edição direta.** Salve pelo aplicativo que quiser (LibreOffice, Word, editores de imagem). A alteração é enviada alguns segundos depois, como nova versão do mesmo arquivo no Drive.
+- **Criar, renomear, mover e excluir** arquivos e pastas. O que é excluído vai para a lixeira do Drive, de onde pode ser recuperado.
+- **Proteção contra perda em edições simultâneas.** Se o arquivo mudou no Drive enquanto você editava, a sua versão é guardada como cópia em vez de apagar a outra. Nenhum programa garante ausência total de conflitos; teste primeiro com cópias.
+- **Manter off-line.** Escolha arquivos ou pastas para ficarem sempre disponíveis sem internet, e libere o espaço quando quiser.
+- **Documentos, Planilhas e Apresentações Google** aparecem como atalhos que abrem no navegador.
+- **Painel** com velocidade de download e de envio, fila de envio, progresso do mapa, uso do cache, espaço usado no Google e atividade recente.
+- **Limites de velocidade** de download e de envio; abrir arquivos tem prioridade sobre envios e cópias off-line.
+- **Pausar e retomar** cada conta. **Início junto com o sistema** e ícone na área de notificação.
+- **Sem servidores do GCP-Drive.** O aplicativo conversa só com o Google; os seus arquivos e logins não passam por nenhum outro lugar.
 
-![Favoritos em galeria](docs/images/favoritos-galeria.png)
+### Só no Linux
 
-## Instalação e montagem
+- Pasta montada em `~/GCP-Drive/<e-mail>`, usável por qualquer programa e pelo terminal.
+- Menu do botão direito no Dolphin, Nautilus e Nemo: manter off-line, copiar link, compartilhar, abrir na nuvem, adicionar atalho a Meu Drive e pedir ao Gemini.
+- Compartilhamento pelo painel: convidar pessoas por e-mail, escolher a permissão e copiar o link.
+- Busca nos arquivos da conta e envio de arquivos pelo painel.
 
-- **Windows:** o EXE inclui o motor e o instalador oficial verificado do WinFsp. O assistente solicita consentimento; o Windows confirma a elevação necessária. Um componente compatível já instalado é reutilizado.
-- **Linux:** DEB/RPM declaram dependências; use o gerenciador de pacotes da distribuição. FUSE, acesso a /dev/fuse e cofre Secret Service/KWallet são necessários para as respectivas funcionalidades. Categoria Internet. AppImage não instala essas dependências automaticamente; mantenha o arquivo em caminho estável.
-- **macOS:** arraste o aplicativo do DMG para Aplicativos. A montagem depende de suporte compatível e autorizado no sistema. macFUSE, compatibilidade do motor e integração Finder ainda precisam de homologação em Intel e Apple Silicon. Compilar o DMG não comprova a montagem.
+### Só no Windows
 
-Configuração de autenticação criptografada e chave protegida pelo cofre do sistema. O armazenamento inseguro basic_text é bloqueado no Linux. O cache de arquivos e o índice de nomes **não** possuem criptografia adicional de conteúdo. A desinstalação Windows pergunta se deve remover configurações e cache; essa opção não apaga pastas escolhidas pelo usuário nem arquivos remotos.
+- Integração com o Explorador de Arquivos: a conta aparece no painel de navegação, com os ícones de estado do Windows (na nuvem, neste dispositivo, sincronizando).
+- **Sempre manter neste dispositivo** e **Liberar espaço** no botão direito, como no OneDrive.
+- Instalação só para o seu usuário, sem pedir senha de administrador, e desinstalação limpa em **Aplicativos instalados**.
 
-## Limitações da prévia
+## Como instalar
 
-Teste inicialmente com cópias de arquivos. Alterações concorrentes podem produzir conflitos; nenhuma ferramenta garante ausência absoluta deles. A política de pastas preserva versões concorrentes, mas precisa de testes adicionais nos provedores.
+### Windows
 
-Indexação global por Windows Search, Spotlight e Tracker/Baloo, pin offline permanente, gerenciamento de versões e presença confirmada de outros editores ainda não estão concluídos. A busca atual cobre pastas visitadas. Ajustes de cache, listagem e montagem, com medições e análise de motores alternativos, estão em [DESEMPENHO.md](docs/DESEMPENHO.md). [Presença opcional](docs/PRESENCA.md) tem desenho documentado, sem serviço implantado. Exportar Google Docs não equivale a edição nativa bidirecional. Os indicadores de sincronização aparecem no painel do app e, no Linux, como emblemas no Nautilus e no Nemo. Não há extensões nativas para Explorador, Finder ou Dolphin.
+1. Baixe `GCP-Drive-0.5.0-instalador.exe`.
+2. O navegador pode avisar que o arquivo "não é baixado com frequência". Escolha **Manter**.
+3. Ao abrir o instalador, o Windows pode mostrar a tela azul **"O Windows protegeu o computador"**. Clique em **Mais informações** e depois em **Executar assim mesmo**.
+4. Siga o instalador. O GCP-Drive abre sozinho e passa a iniciar junto com o Windows.
 
-## Desenvolvimento
+O aviso do passo 3 aparece porque o instalador não tem assinatura digital, um certificado pago que programas gratuitos geralmente não têm. Não é sinal de vírus: o código está neste repositório e o instalador é gerado a partir dele, de forma automática, pelo GitHub.
 
-Node **24.22.1** e npm **11.16.0**, conforme .nvmrc e packageManager.
+### Linux
+
+Baixe o pacote da sua distribuição e, na pasta do download, instale:
 
 ```sh
-npm ci
-npm run prepare:rclone
-npm run build
-npm start
+sudo apt install ./gcp-drive_0.5.0-3_amd64.deb
 ```
-
-O preparo baixa rclone 1.75.2 do domínio oficial e valida SHA-256. Binários, configurações e caches locais são ignorados pelo Git.
 
 ```sh
-npm run typecheck
-npm test
-npm run test:engine
-npm run test:sync
-npm run test:desktop
+sudo dnf install ./gcp-drive-0.5.0-3.x86_64.rpm
 ```
 
-Testes de interface usam perfil temporário; testes do motor usam pastas locais, sem autenticar provedores. O workflow compila em Windows, Linux e macOS na arquitetura correspondente. Empacotamento local: prepare o motor e use pack:win, pack:linux ou pack:mac no sistema apropriado.
+```sh
+sudo pacman -U ./gcp-drive-0.5.0-3-x86_64.pkg.tar.zst
+```
 
-## Contribuição, privacidade e licenças
+Use só a linha do seu sistema: a primeira é para Debian, Ubuntu e Mint; a segunda, para Fedora; a terceira, para Arch, Manjaro e BigLinux. Depois abra **GCP-Drive** no menu de aplicativos, categoria Internet.
 
-Veja [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) e [componentes de terceiros](THIRD_PARTY_NOTICES.md). Não envie credenciais ou dados pessoais em issues.
+## Conectar a sua conta do Google
+
+O Google exige que todo aplicativo que acessa o Drive tenha um cadastro. O GCP-Drive **não traz um cadastro pronto**: cada pessoa cria o seu, de graça, na própria Conta do Google. Leva cerca de 10 minutos, é feito uma vez só e o arquivo do cadastro fica apenas no seu computador.
+
+**[Passo a passo ilustrado para criar o cadastro](docs/CADASTRO-GOOGLE.md)**
+
+![Guia ilustrado do cadastro no Google](docs/images/guia-cadastro.png)
+
+### O aviso "O Google não verificou este app"
+
+No primeiro login, o Google mostra esse aviso. **Ele é esperado e não indica problema.** Aparece porque o cadastro é seu e não passou pela verificação do Google, um processo pago e voltado a empresas. Para continuar:
+
+1. Clique em **Avançado**.
+2. Clique em **Acessar GCP-Drive (não seguro)**.
+3. Confira a conta e clique em **Continuar**.
+4. **Marque a caixa** de acesso aos arquivos do Google Drive e clique em **Continuar**.
+
+O "desenvolvedor" citado no aviso é o e-mail de quem criou o cadastro, ou seja, o seu. O acesso é concedido ao seu próprio cadastro, no seu computador.
+
+## Segurança e privacidade
+
+- **Código aberto.** Todo o código do aplicativo está neste repositório, em [`native/`](native/), para quem quiser auditar.
+- **Sem chaves no repositório.** O repositório e os instaladores não contêm cadastros do Google, senhas nem logins de ninguém.
+- **Logins só no seu computador.** As autorizações das contas ficam em arquivos privados do seu usuário e são usadas apenas para falar com o Google.
+- **Sem coleta de dados.** O GCP-Drive não tem servidor próprio, telemetria nem anúncios.
+- O cache de leitura fica na sua pasta de usuário, sem criptografia adicional; use a criptografia de disco do sistema se o computador for compartilhado.
+
+## O que foi testado
+
+O registro completo, com o que foi e o que não foi executado, está em [docs/VALIDACAO.md](docs/VALIDACAO.md). Em resumo:
+
+- **Linux:** usado no BigLinux/KDE com contas reais (leitura, gravação e instalação do pacote `.pkg.tar.zst`). Os pacotes `.deb` e `.rpm` foram conferidos por dentro, mas ainda não instalados no Debian/Ubuntu e no Fedora.
+- **Windows:** os testes automáticos rodam no Windows Server do GitHub contra um Google Drive simulado, incluindo instalar, atualizar e desinstalar. A homologação numa área de trabalho real, com contas reais, ainda está em andamento.
+
+É uma versão nova: comece com arquivos que tenham cópia e [relate problemas](https://github.com/cliqueprojeto/GCP-Drive/issues), sem enviar dados pessoais.
+
+## Para quem desenvolve
+
+O aplicativo atual é o motor em Go da pasta [`native/`](native/README.md), com FUSE no Linux e a API de Arquivos na Nuvem no Windows. A raiz do repositório guarda também o cliente anterior, em Electron, que não é mais distribuído.
+
+```sh
+cd native
+go vet ./... && go test -race ./...
+./package.sh
+```
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) e os [componentes de terceiros](THIRD_PARTY_NOTICES.md).
 
 ## Apoie o projeto
 
-O apoio é voluntário; as funcionalidades não dependem de contribuição. O aplicativo oferece PIX com QR Code e [contribuição via Stripe](https://donate.stripe.com/fZu4gzeBSfhbd7451F6Ri00).
+O GCP-Drive é gratuito e o apoio é voluntário: PIX pelo painel do aplicativo ou [contribuição via Stripe](https://donate.stripe.com/fZu4gzeBSfhbd7451F6Ri00).
