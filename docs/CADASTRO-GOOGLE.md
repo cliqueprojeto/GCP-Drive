@@ -44,12 +44,24 @@ No painel do GCP-Drive, no quadro **Cadastro no Google**, clique em **Escolher a
 
 ## 7. No primeiro login, passe pelo aviso do Google
 
-Ao adicionar uma conta, o Google mostra **"O Google não verificou este app"**. É esperado: o cadastro é seu e não passou pela verificação do Google, um processo pago voltado a empresas. O aviso não indica um problema no aplicativo, cujo código é aberto para quem quiser conferir. Clique em **Avançado** e em **Acessar GCP-Drive (não seguro)**, depois permita o acesso ao Drive.
+Ao adicionar uma conta, o navegador abre a página do Google. Escolha a conta e aparece **"O Google não verificou este app"**. É esperado: o cadastro é seu e não passou pela verificação do Google, um processo pago voltado a empresas. O aviso não indica um problema no aplicativo, cujo código é aberto para quem quiser conferir. Se o link vermelho não estiver à vista, clique em **Avançado**; depois clique em **Acessar GCP-Drive (não seguro)**. O desenvolvedor citado no aviso é o e-mail de quem criou o cadastro, ou seja, o seu.
 
 ![Aviso do Google](../native/panel/guia/7-aviso.svg)
+
+## 8. Confirme a conta
+
+Na tela **Fazer login no serviço GCP-Drive**, confira o e-mail e clique em **Continuar**.
+
+![Confirmar a conta](../native/panel/guia/8-login.svg)
+
+## 9. Marque o acesso ao Drive e continue
+
+Na última tela, **marque a caixa** ao lado de "Ver, editar, criar e excluir todos os seus arquivos do Google Drive" e clique em **Continuar**. Se a caixa ficar desmarcada, a conta entra mas o GCP-Drive não consegue abrir os arquivos. O navegador mostra "Conta conectada" e a pasta da conta aparece no painel.
+
+![Marcar o acesso ao Drive](../native/panel/guia/9-permitir.svg)
 
 Cada cadastro não verificado aceita até 100 Contas do Google.
 
 ## O que foi conferido
 
-Os nomes das páginas e dos botões foram conferidos na documentação pública do Google em 14 de novembro de 2026 ("Configurar a tela de permissão OAuth" e "Criar credenciais de acesso"). O percurso não foi feito de ponta a ponta numa conta, e o Google muda essas telas de tempos em tempos.
+Os nomes das páginas e dos botões foram conferidos na documentação pública do Google em 14 de novembro de 2026 ("Configurar a tela de permissão OAuth" e "Criar credenciais de acesso"). As três telas do login (passos 7 a 9) foram redesenhadas a partir de capturas enviadas pelo autor, sem os dados que elas mostravam. Os passos 1 a 6 não foram feitos de ponta a ponta numa conta, e o Google muda essas telas de tempos em tempos.
