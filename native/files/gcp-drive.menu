@@ -1,0 +1,11 @@
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+ "https://specifications.freedesktop.org/menu-spec/menu-1.0.dtd">
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>Internet</Name>
+    <Include>
+      <Filename>org.gcpdrive.Desktop.desktop</Filename>
+    </Include>
+  </Menu>
+</Menu>

@@ -38,3 +38,6 @@ packaging/arch/**/LICENSE
 packaging/arch/**/THIRD_PARTY_NOTICES.md
 packaging/arch/**/SHA256SUMS-ARCH
 packaging/arch/**/namcap-report.txt
+
+# Motor nativo
+native/**/__pycache__/

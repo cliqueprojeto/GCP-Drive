@@ -1,0 +1,1287 @@
+#!/usr/bin/python3
+import json
+import os
+import shutil
+import subprocess
+import sys
+import traceback
+from pathlib import Path
+from datetime import datetime
+from urllib.parse import unquote, urlsplit
+from drive_places import update_places
+
+NAME = "GCP-Drive"
+ICON = "gcp-drive"
+CORE = "/usr/bin/gcp-drive"
+SUPPORT_SITE = "https://gestaoculturalpro.com.br/"
+SUPPORT_STRIPE = "https://donate.stripe.com/fZu4gzeBSfhbd7451F6Ri00"
+SUPPORT_PIX = ("00020126850014br.gov.bcb.pix0136e474b71b-7491-4eac-992f-632652e5a4eb"
+               "0223DEV GESTAO CULTURAL PRO5204000053039865802BR5915BRUNO ALBERTINI"
+               "6006BRASIL62200516ChromeExtensions63042B27")
+DATA = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "opengdrive"
+SETUP_SHOWN = CONFIG / "opengdrive/setup-shown"
+AUTOSTART = CONFIG / "autostart/opengdrive.desktop"
+DISABLED = "[Desktop Entry]\nType=Application\nName=OpenGdrive\nHidden=true\nX-OpenGdrive-Managed=true\n"
+
+
+def startup_error(summary, error, notify=False):
+    details = "".join(traceback.format_exception(error)).strip()
+    print(f"{NAME}: {summary}\n{details}", file=sys.stderr)
+    log = STATE / "interface.log"
+    try:
+        STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(f"{summary}\n{details}\n")
+        summary += f"\n\nDetalhes em {log}"
+    except OSError:
+        pass
+    if not notify:
+        return
+    if shutil.which("kdialog"):
+        subprocess.Popen(["kdialog", "--title", NAME, "--error", summary])
+    elif shutil.which("zenity"):
+        subprocess.Popen(["zenity", "--error", "--title", NAME, "--text", summary])
+
+
+try:
+    import gi
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gdk, Gio, GLib, Gtk, Pango
+except (ImportError, OSError, ValueError) as error:
+    startup_error("Não foi possível carregar o GTK 3.", error, notify=True)
+    sys.exit(1)
+
+
+def vertical(spacing=12):
+    return Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=spacing)
+
+
+def horizontal(spacing=8):
+    return Gtk.Box(spacing=spacing)
+
+
+def label(text, style=None):
+    item = Gtk.Label(label=text, xalign=0)
+    item.set_line_wrap(True)
+    if style:
+        item.get_style_context().add_class(style)
+    return item
+
+
+def button(title, callback, style=None, icon=None):
+    item = Gtk.Button.new_with_label(title)
+    if icon:
+        item.set_image(Gtk.Image.new_from_icon_name(icon, Gtk.IconSize.BUTTON))
+        item.set_always_show_image(True)
+    if style:
+        item.get_style_context().add_class(style)
+    if style == "link":
+        item.set_halign(Gtk.Align.START)
+    item.connect("clicked", lambda *_: callback())
+    return item
+
+
+def icon_button(icon, title, callback):
+    item = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.BUTTON)
+    item.set_tooltip_text(title)
+    item.get_accessible().set_name(title)
+    item.get_style_context().add_class("toolbar")
+    item.connect("clicked", lambda *_: callback())
+    return item
+
+
+def show_support(parent):
+    dialog = Gtk.Dialog(title="Apoie o projeto", transient_for=parent, modal=True, destroy_with_parent=True)
+    dialog.get_style_context().add_class("opengdrive")
+    dialog.get_style_context().add_class("share-dialog")
+    dialog.set_default_size(680, -1)
+    dialog.add_button("Fechar", Gtk.ResponseType.CLOSE)
+    content = dialog.get_content_area()
+    content.set_border_width(24)
+    content.set_spacing(14)
+    content.pack_start(label("Apoie o projeto", "share-title"), False, False, 0)
+    author = Gtk.LinkButton.new_with_label(SUPPORT_SITE, "Desenvolvido por Bruno Albertini · Gestão Cultural Pro")
+    author.set_halign(Gtk.Align.START)
+    content.pack_start(author, False, False, 0)
+
+    columns = horizontal(14)
+    columns.set_homogeneous(True)
+    content.pack_start(columns, False, False, 0)
+    assets = Path(__file__).parent
+
+    def payment_card(title, code, instruction):
+        panel = vertical(10)
+        panel.get_style_context().add_class("support-card")
+        columns.pack_start(panel, True, True, 0)
+        panel.pack_start(label(title, "share-section"), False, False, 0)
+        image = Gtk.Image.new_from_file(str(assets / code))
+        image.get_accessible().set_name("QR Code " + title)
+        panel.pack_start(image, False, False, 0)
+        panel.pack_start(label(instruction, "muted"), False, False, 0)
+        return panel
+
+    def copy_control(title, value, style):
+        control = Gtk.Button(label=title)
+        control.get_style_context().add_class(style)
+
+        def copy(_):
+            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(value, -1)
+            control.set_label("Copiado")
+
+        control.connect("clicked", copy)
+        return control
+
+    pix = payment_card("PIX · Brasil", "support-pix.png", "Escaneie com o aplicativo do seu banco.")
+    pix.pack_start(copy_control("Copiar PIX", SUPPORT_PIX, "primary"), False, False, 0)
+    details = Gtk.Expander(label="Ver código PIX")
+    code = label(SUPPORT_PIX)
+    code.set_line_wrap_mode(Pango.WrapMode.CHAR)
+    code.set_max_width_chars(32)
+    code.set_selectable(True)
+    details.add(code)
+    pix.pack_start(details, False, False, 0)
+
+    stripe = payment_card("Stripe · Internacional", "support-stripe.png", "Escaneie com a câmera do celular.")
+    stripe.pack_start(Gtk.LinkButton.new_with_label(SUPPORT_STRIPE, "Contribuir via Stripe"), False, False, 0)
+    stripe.pack_start(copy_control("Copiar link do Stripe", SUPPORT_STRIPE, "link"), False, False, 0)
+    content.pack_start(label("O apoio é voluntário.", "muted"), False, False, 0)
+    dialog.connect("response", lambda *_: dialog.destroy())
+    dialog.show_all()
+
+
+def communicate(args, callback):
+    flags = Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+    try:
+        process = Gio.Subprocess.new([CORE, *args], flags)
+    except GLib.Error as error:
+        callback(None, str(error))
+        return
+
+    def completed(proc, result):
+        try:
+            _, out, err = proc.communicate_utf8_finish(result)
+            if proc.get_successful():
+                callback(out, None)
+            else:
+                callback(None, err.strip() or "Não foi possível concluir a operação.")
+        except GLib.Error as error:
+            callback(None, str(error))
+
+    process.communicate_utf8_async(None, None, completed)
+
+
+def message(parent, title, detail="", error=False):
+    dialog = Gtk.MessageDialog(
+        transient_for=parent, modal=True,
+        message_type=Gtk.MessageType.ERROR if error else Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.OK, text=title,
+    )
+    if detail:
+        dialog.format_secondary_text(detail)
+    dialog.run()
+    dialog.destroy()
+
+
+def confirm(parent, title, detail):
+    dialog = Gtk.MessageDialog(
+        transient_for=parent, modal=True, message_type=Gtk.MessageType.QUESTION,
+        buttons=Gtk.ButtonsType.NONE, text=title,
+    )
+    dialog.format_secondary_text(detail)
+    dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+    dialog.add_button("Continuar", Gtk.ResponseType.OK)
+    dialog.set_default_response(Gtk.ResponseType.CANCEL)
+    result = dialog.run() == Gtk.ResponseType.OK
+    dialog.destroy()
+    return result
+
+
+def choose_file(parent, title):
+    dialog = Gtk.FileChooserNative.new(
+        title, parent, Gtk.FileChooserAction.OPEN, "Selecionar", "Cancelar",
+    )
+    result = dialog.get_filename() if dialog.run() == Gtk.ResponseType.ACCEPT else None
+    dialog.destroy()
+    return result
+
+
+def open_value(value, parent=None):
+    try:
+        uri = Path(value).as_uri() if value.startswith("/") else value
+        Gio.AppInfo.launch_default_for_uri(uri, None)
+    except (ValueError, GLib.Error) as error:
+        message(parent, "Não foi possível abrir", str(error), True)
+
+
+def google_url(suffix, email):
+    from urllib.parse import urlencode
+    return "https://drive.google.com/drive/" + suffix + "?" + urlencode({"authuser": email})
+
+
+def size_text(count):
+    value = int(count or 0)
+    for unit in ("bytes", "KB", "MB", "GB", "TB"):
+        if value < 1024 or unit == "TB":
+            return f"{value:,.1f} {unit}" if unit != "bytes" else f"{value} bytes"
+        value /= 1024
+
+
+class Dashboard(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.gcpdrive.Desktop",
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+        )
+        self.add_main_option(
+            "autostart", 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
+            "Iniciar com a sessão", None,
+        )
+        self.add_main_option(
+            "hidden", 0, GLib.OptionFlags.HIDDEN, GLib.OptionArg.NONE,
+            "Iniciar na bandeja", None,
+        )
+        self.window = None
+        self.daemon = None
+        self.tray = None
+        self.tray_held = False
+        self.tray_animation = None
+        self.tray_frame = 0
+        self.places_signature = None
+        self.background_started = False
+        self.refresh_timer = None
+        self.rows = []
+        self.selected = None
+        self.page = "home"
+        self.local_status = None
+        self.cloud_status = None
+        self.status_error = None
+        self.refreshing = False
+        self.login_pending = False
+        self.settings = None
+        self.version = ""
+        self.live = {}
+
+    def do_command_line(self, command):
+        options = command.get_options_dict()
+        if options.contains("hidden") or (options.contains("autostart") and SETUP_SHOWN.is_file()):
+            self.start_background()
+            return 0
+        return 0 if self.present_panel() else 1
+
+    def start_background(self):
+        if self.background_started:
+            return GLib.SOURCE_REMOVE
+        self.background_started = True
+        try:
+            self.start_daemon()
+        except OSError as error:
+            startup_error("Não foi possível iniciar a montagem das unidades.", error)
+            self.status_error = "O serviço de montagem não iniciou. Consulte o log da interface."
+            self.render()
+        try:
+            self.create_tray()
+            if self.tray and not self.tray_held:
+                self.hold()
+                self.tray_held = True
+        except Exception as error:
+            startup_error("Não foi possível registrar o ícone na bandeja.", error)
+        self.ensure_refresh()
+        return GLib.SOURCE_REMOVE
+
+    def start_daemon(self):
+        if self.daemon is None:
+            self.daemon = subprocess.Popen(
+                [CORE, "daemon"], stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+
+    def create_tray(self):
+        try:
+            gi.require_version("AyatanaAppIndicator3", "0.1")
+            from gi.repository import AyatanaAppIndicator3 as Indicator
+        except (ValueError, ImportError):
+            if "x11" in Gdk.Display.get_default().__class__.__name__.lower():
+                self.tray = Gtk.StatusIcon.new_from_icon_name(ICON)
+                self.tray.set_tooltip_text(NAME)
+                self.tray.connect("activate", lambda *_: self.activate())
+            return
+        self.tray = Indicator.Indicator.new(
+            "opengdrive", ICON, Indicator.IndicatorCategory.APPLICATION_STATUS,
+        )
+        menu = Gtk.Menu()
+        for title, action in (("Abrir GCP-Drive", self.activate), ("Abrir pasta do Drive", self.open_mount), ("Sair do painel", self.quit)):
+            item = Gtk.MenuItem.new_with_label(title)
+            item.connect("activate", lambda _item, fn=action: fn())
+            menu.append(item)
+        menu.show_all()
+        self.tray.set_menu(menu)
+        self.tray.set_status(Indicator.IndicatorStatus.ACTIVE)
+
+    def set_tray_icon(self, icon, detail):
+        if isinstance(self.tray, Gtk.StatusIcon):
+            self.tray.set_from_icon_name(icon)
+            self.tray.set_tooltip_text(detail)
+        else:
+            self.tray.set_icon_full(icon, detail)
+
+    def animate_tray(self):
+        self.set_tray_icon(f"{ICON}-sync-{self.tray_frame}", "GCP-Drive · Transferindo arquivos")
+        self.tray_frame = (self.tray_frame + 1) % 4
+        return GLib.SOURCE_CONTINUE
+
+    def update_desktop_integration(self):
+        active = any(item["Status"] == "Em andamento" for row in self.rows for item in row.get("Activity") or [])
+        if self.tray and active and self.tray_animation is None:
+            self.animate_tray()
+            self.tray_animation = GLib.timeout_add(250, self.animate_tray)
+        elif self.tray and not active and self.tray_animation is not None:
+            GLib.source_remove(self.tray_animation)
+            self.tray_animation = None
+            self.set_tray_icon(ICON, NAME)
+        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper().split(":")
+        if "KDE" not in desktop and not os.environ.get("KDE_FULL_SESSION"):
+            return
+        signature = tuple((row["ID"], row["Path"], row["Email"], row["Mounted"]) for row in self.rows)
+        if signature == self.places_signature:
+            return
+        try:
+            update_places(self.rows, DATA)
+        except (OSError, ValueError) as error:
+            print(f"{NAME}: {error}", file=sys.stderr)
+        else:
+            self.places_signature = signature
+
+    def ensure_refresh(self):
+        if self.refresh_timer is None:
+            self.refresh()
+            self.refresh_timer = GLib.timeout_add_seconds(2, self.refresh)
+
+    def do_activate(self):
+        self.present_panel()
+
+    def present_panel(self):
+        if self.window:
+            self.window.present()
+            return True
+        first_launch = not SETUP_SHOWN.is_file()
+        if first_launch:
+            self.page = "accounts"
+        try:
+            self.window = Gtk.ApplicationWindow(application=self, title=NAME)
+            self.window.get_style_context().add_class("opengdrive")
+            self.window.set_default_size(1080, 735)
+            self.window.set_size_request(740, 495)
+            self.window.set_icon_name(ICON)
+            self.window.connect("delete-event", self.close_panel)
+            self.create_layout()
+            self.window.show_all()
+            self.window.present()
+        except Exception as error:
+            if self.window:
+                self.window.destroy()
+                self.window = None
+            startup_error("Não foi possível abrir a janela de configuração.", error, notify=True)
+            return False
+        if first_launch:
+            try:
+                SETUP_SHOWN.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                SETUP_SHOWN.touch(mode=0o600)
+            except OSError as error:
+                startup_error("Não foi possível registrar a primeira abertura.", error)
+        GLib.idle_add(self.start_background)
+        self.ensure_refresh()
+        self.load_settings()
+        return True
+
+    def close_panel(self, *_):
+        self.window = None
+        return False
+
+    def create_layout(self):
+        frame = vertical(16)
+        frame.set_border_width(17)
+        self.window.add(frame)
+        top = horizontal(16)
+        brand = horizontal(9)
+        brand.set_size_request(224, -1)
+        image = Gtk.Image.new_from_icon_name(ICON, Gtk.IconSize.DIALOG)
+        image.set_pixel_size(36)
+        brand.pack_start(image, False, False, 0)
+        brand.pack_start(label(NAME, "brand"), False, False, 0)
+        top.pack_start(brand, False, False, 0)
+        search = Gtk.SearchEntry()
+        search.set_placeholder_text("Pesquisar no Google Drive")
+        search.connect("activate", lambda item: self.search(item.get_text()))
+        top.pack_start(search, True, True, 0)
+        self.pause_button = icon_button("media-playback-pause-symbolic", "Pausar sincronização", self.pause)
+        top.pack_start(self.pause_button, False, False, 0)
+        settings = Gtk.MenuButton()
+        settings.set_image(Gtk.Image.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.BUTTON))
+        settings.set_tooltip_text("Mais opções")
+        settings.get_style_context().add_class("toolbar")
+        menu = Gtk.Menu()
+        for title, page in (
+            ("Preferências", "preferences"), ("Espaço usado", "storage"),
+            ("Lista de erros", "notifications"), ("Sobre", "about"),
+        ):
+            entry = Gtk.MenuItem.new_with_label(title)
+            entry.connect("activate", lambda _, view=page: self.show(view))
+            menu.append(entry)
+        support = Gtk.MenuItem.new_with_label("Apoie o projeto")
+        support.connect("activate", lambda _: show_support(self.window))
+        menu.append(support)
+        menu.show_all()
+        settings.set_popup(menu)
+        top.pack_start(settings, False, False, 0)
+        top.pack_start(icon_button("starred-symbolic", "Gemini no Google Drive", self.gemini), False, False, 0)
+        self.account_button = button("Contas", lambda: self.show("accounts"), "account", "avatar-default-symbolic")
+        top.pack_start(self.account_button, False, False, 0)
+        frame.pack_start(top, False, False, 0)
+
+        body = horizontal(18)
+        rail = vertical(5)
+        rail.set_size_request(224, -1)
+        rail.pack_start(button("Abrir pasta do Drive", self.open_mount, "open-drive", "folder-symbolic"), False, False, 0)
+        rail.pack_start(Gtk.Box(height_request=13), False, False, 0)
+        self.nav = {}
+        for page, title, icon in (
+            ("home", "Início", "go-home-symbolic"),
+            ("activity", "Atividade", "view-refresh-symbolic"),
+            ("notifications", "Notificações", "dialog-information-symbolic"),
+        ):
+            item = button(title, lambda view=page: self.show(view), "nav", icon)
+            item.get_child().set_halign(Gtk.Align.START)
+            rail.pack_start(item, False, False, 0)
+            self.nav[page] = item
+        body.pack_start(rail, False, False, 0)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.surface = vertical(16)
+        scroller.add(self.surface)
+        body.pack_start(scroller, True, True, 0)
+        frame.pack_start(body, True, True, 0)
+        self.render()
+
+    def current(self):
+        return next((row for row in self.rows if row["ID"] == self.selected), None)
+
+    def refresh(self):
+        if self.refreshing:
+            return True
+        self.refreshing = True
+
+        def update(out, err):
+            self.refreshing = False
+            old = self.rows
+            old_error = self.status_error
+            self.status_error = err
+            if not err:
+                self.rows = json.loads(out)
+                if not self.current():
+                    self.selected = self.rows[0]["ID"] if self.rows else None
+                self.update_desktop_integration()
+            if not self.window or self.page == "search":
+                return
+            if self.stable(old) != self.stable(self.rows) or old_error != err:
+                self.render()
+            else:
+                self.update_live()
+        communicate(["status"], update)
+        return True
+
+    def show(self, page):
+        self.page = page
+        self.local_status = self.cloud_status = None
+        self.render()
+        active = self.current()
+        if page == "storage" and active:
+            self.load_storage(active["ID"])
+        if page in ("preferences", "about"):
+            self.load_settings()
+
+    def load_storage(self, account):
+        def update(field):
+            def receive(out, err):
+                if self.page != "storage" or self.selected != account:
+                    return
+                setattr(self, field, json.loads(out) if not err else {"Error": err})
+                self.render()
+            return receive
+        communicate(["storage", account], update("local_status"))
+        communicate(["quota", account], update("cloud_status"))
+
+    def selected_account(self, account):
+        self.selected = account
+        self.render()
+
+    def open_mount(self):
+        active = self.current()
+        if not active:
+            if self.window:
+                self.show("accounts")
+            else:
+                self.activate()
+            return
+        path = active["MirrorPath"] if active["Mirror"] else active["Path"]
+        if not Path(path).is_dir() or not (active["Mounted"] or active["Mirror"]):
+            message(self.window, "Unidade indisponível", active["Problem"] or "Aguarde a montagem da conta.")
+            return
+        open_value(path, self.window)
+
+    def gemini(self):
+        active = self.current()
+        if active and not active.get("Provider"):
+            open_value(google_url("my-drive", active["Email"]), self.window)
+            message(self.window, "Gemini no Google Drive", "No Drive para Web, abra o painel do Gemini se o recurso estiver disponível para a sua conta.")
+        else:
+            self.show("accounts")
+
+    def pause(self):
+        active = self.current()
+        if not active:
+            return
+        state = "off" if active["Paused"] else "on"
+        self.pause_button.set_sensitive(False)
+        def completed(_, error):
+            if self.window:
+                self.pause_button.set_sensitive(True)
+                self.result("Alterar pausa da sincronização", error)
+        communicate(["pause", active["ID"], state], completed)
+
+    def result(self, title, err, refresh=True):
+        if err:
+            message(self.window, title, err, True)
+        if refresh:
+            self.refresh()
+
+    def add_account(self):
+        if self.login_pending:
+            return
+        self.login_pending = True
+        self.render()
+
+        def completed(_, error):
+            self.login_pending = False
+            if self.window:
+                self.render()
+                self.result("Conectar conta do Google", error)
+
+        communicate(["login"], completed)
+
+    def add_account_button(self, icon=None):
+        title = "Aguardando autorização no navegador…" if self.login_pending else "Conectar conta do Google"
+        item = button(title, self.add_account, "primary", icon)
+        item.set_sensitive(not self.login_pending)
+        return item
+
+    def disconnect(self, active):
+        if confirm(self.window, "Desconectar a conta?", active["Email"] + "\nOs arquivos continuam no Google Drive. As cópias guardadas neste computador serão apagadas."):
+            communicate(["disconnect", active["ID"]], lambda _, err: self.result("Desconectar conta", err))
+
+    def upload(self):
+        active = self.current()
+        if not active:
+            self.show("accounts")
+            return
+        file = choose_file(self.window, "Enviar um arquivo para Meu Drive")
+        if file:
+            communicate(["upload", active["ID"], file], lambda _, err: self.result("Enviar arquivo", err))
+
+    def toggle_autostart(self, widget):
+        try:
+            old = AUTOSTART.read_text(encoding="utf-8") if AUTOSTART.exists() else None
+            if old is not None and old != DISABLED:
+                raise ValueError("Já existe uma configuração de inicialização neste caminho.")
+            if widget.get_active():
+                if old is not None:
+                    AUTOSTART.unlink()
+            else:
+                AUTOSTART.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with AUTOSTART.open("x", encoding="utf-8") as file:
+                    file.write(DISABLED)
+        except (OSError, ValueError) as error:
+            message(self.window, "Alterar inicialização", str(error), True)
+
+    def search(self, query):
+        active = self.current()
+        if not active:
+            self.show("accounts")
+            return
+        query = query.strip()
+        if not query:
+            return
+        self.show("search")
+        self.surface.pack_start(label("Pesquisando…", "muted"), False, False, 0)
+        self.surface.show_all()
+
+        def receive(out, err):
+            if not self.window or self.page != "search":
+                return
+            self.render()
+            card = self.card("Resultados da pesquisa", "“" + query + "” em " + active["Email"])
+            if err:
+                card.pack_start(label(err), False, False, 0)
+            else:
+                rows = json.loads(out)
+                if not rows:
+                    card.pack_start(label("Nenhum resultado nesta conta."), False, False, 0)
+                for row in rows:
+                    card.pack_start(button(row["Name"], lambda link=row["Link"]: open_value(link, self.window), "link"), False, False, 0)
+            self.surface.show_all()
+        communicate(["search", active["ID"], query], receive)
+
+    def card(self, heading, description="", parent=None, stretch=False):
+        box = vertical()
+        box.get_style_context().add_class("card")
+        box.pack_start(label(heading, "heading"), False, False, 0)
+        if description:
+            box.pack_start(label(description, "muted"), False, False, 0)
+        (parent if parent is not None else self.surface).pack_start(box, stretch, stretch, 0)
+        return box
+
+    def chip(self, text, kind):
+        item = label(text, "chip")
+        item.get_style_context().add_class(kind)
+        item.set_halign(Gtk.Align.START)
+        return item
+
+    def state_of(self, row):
+        if row["Problem"]:
+            return "Precisa de atenção", "warn"
+        if row["Paused"]:
+            return "Pausada", "idle"
+        if not row["Mounted"]:
+            return "Montando…", "idle"
+        if row["Uploads"] or row["Pending"]:
+            return "Enviando alterações", "busy"
+        if row["Downloads"]:
+            return "Baixando", "busy"
+        return "Tudo em dia", "ok"
+
+    def problems(self):
+        errors = [self.status_error] if self.status_error else []
+        for row in self.rows:
+            for text in (row["Problem"], row["FileProblem"]):
+                if text:
+                    errors.append(row["Email"] + " · " + text)
+        return errors
+
+    def stable(self, rows):
+        """The part of the status that changes the layout; live numbers update in place."""
+        volatile = ("Down", "Up", "Downloads", "CacheBytes", "Uploads", "Items")
+        return [{k: v for k, v in row.items() if k not in volatile} | {"U": [u["Name"] for u in row.get("Uploads") or []], "B": bool(row["Downloads"])} for row in rows]
+
+    def update_live(self):
+        active = self.current()
+        if not active or not self.live:
+            return
+        if "down" in self.live:
+            self.live["down"].set_text(size_text(active["Down"]) + "/s")
+            self.live["up"].set_text(size_text(active["Up"]) + "/s")
+        if "map" in self.live:
+            self.live["map"].set_text(self.map_text(active))
+        if "cache" in self.live:
+            self.live["cache"].set_fraction(min(1.0, active["CacheBytes"] / max(1, active["CacheLimit"])))
+            self.live["cache_text"].set_text(size_text(active["CacheBytes"]) + " de " + size_text(active["CacheLimit"]) + " usados para abrir arquivos mais rápido")
+        for name, bar in self.live.get("uploads", {}).items():
+            for item in active.get("Uploads") or []:
+                if item["Name"] == name and item["Total"]:
+                    bar.set_fraction(min(1.0, item["Done"] / item["Total"]))
+
+    def map_text(self, active):
+        count = f'{active["Items"]:,}'.replace(",", ".")
+        if active["Mapped"]:
+            return "Mapa de pastas completo · " + count + " itens. As pastas abrem na hora."
+        return "Mapeando as pastas da conta… " + count + " itens até agora. Você já pode usar a unidade."
+
+    def render(self):
+        if not self.window:
+            return
+        active = self.current()
+        paused = active and active["Paused"]
+        pause_icon = "media-playback-start-symbolic" if paused else "media-playback-pause-symbolic"
+        pause_label = "Retomar sincronização" if paused else "Pausar sincronização"
+        self.pause_button.set_image(Gtk.Image.new_from_icon_name(pause_icon, Gtk.IconSize.BUTTON))
+        self.pause_button.set_tooltip_text(pause_label)
+        self.pause_button.get_accessible().set_name(pause_label)
+        self.pause_button.set_sensitive(active is not None)
+        adjustment = self.surface.get_parent().get_parent().get_vadjustment()
+        position = adjustment.get_value()
+        self.live = {}
+        for child in self.surface.get_children():
+            child.destroy()
+        for name, item in self.nav.items():
+            context = item.get_style_context()
+            if name == self.page:
+                context.add_class("selected")
+            else:
+                context.remove_class("selected")
+        self.account_button.set_label((active["Name"] or active["Email"]).split()[0] if active else "Contas")
+        pages = {"home": self.home, "accounts": self.accounts, "preferences": self.preferences,
+                 "storage": self.storage, "activity": self.activity}
+        if self.page in pages:
+            pages[self.page](active)
+        elif self.page == "notifications":
+            self.notifications()
+        elif self.page == "about":
+            about = self.card(NAME + " " + self.version, "Google Drive no Linux, com streaming, cópias off-line e várias contas.")
+            about.pack_start(label("Gestão Cultural Pro · Bruno Albertini", "muted"), False, False, 0)
+            about.pack_start(button("Apoie o projeto", lambda: show_support(self.window), "pill"), False, False, 0)
+        self.surface.show_all()
+        self.update_live()
+        GLib.idle_add(lambda: adjustment.set_value(min(position, adjustment.get_upper())) and False)
+
+    def home(self, active):
+        if not active:
+            hero = self.card("Bem-vindo ao GCP-Drive", "Conecte a sua conta do Google. O Drive aparece como uma pasta do computador, e os arquivos são baixados só quando você abre.")
+            hero.get_style_context().add_class("hero")
+            row = horizontal()
+            row.pack_start(self.add_account_button("list-add-symbolic"), False, False, 0)
+            hero.pack_start(row, False, False, 0)
+            return
+        text, kind = self.state_of(active)
+        hero = self.card(active["Name"] or active["Email"], active["Email"])
+        hero.get_style_context().add_class("hero")
+        hero.pack_start(self.chip(text, kind), False, False, 0)
+        stats = horizontal(12)
+        for key, title in (("down", "Download"), ("up", "Envio")):
+            box = vertical(2)
+            box.get_style_context().add_class("stat")
+            self.live[key] = label("0 B/s", "stat-value")
+            box.pack_start(self.live[key], False, False, 0)
+            box.pack_start(label(title, "muted"), False, False, 0)
+            stats.pack_start(box, True, True, 0)
+        box = vertical(2)
+        box.get_style_context().add_class("stat")
+        box.pack_start(label(str(active["Pending"]), "stat-value"), False, False, 0)
+        box.pack_start(label("Aguardando envio", "muted"), False, False, 0)
+        stats.pack_start(box, True, True, 0)
+        hero.pack_start(stats, False, False, 0)
+        actions = horizontal(8)
+        actions.pack_start(button("Abrir pasta do Drive", self.open_mount, "primary", "folder-open-symbolic"), False, False, 0)
+        actions.pack_start(button("Enviar arquivo", self.upload, "pill", "document-send-symbolic"), False, False, 0)
+        actions.pack_start(button("Abrir na Web", lambda: open_value(google_url("my-drive", active["Email"]), self.window), "pill", "web-browser-symbolic"), False, False, 0)
+        hero.pack_start(actions, False, False, 0)
+
+        columns = horizontal(16)
+        left, right = vertical(16), vertical(16)
+        columns.pack_start(left, True, True, 0)
+        columns.pack_start(right, True, True, 0)
+        self.surface.pack_start(columns, False, False, 0)
+
+        box = self.card("Pastas e arquivos", parent=left)
+        self.live["map"] = label("", "muted")
+        box.pack_start(self.live["map"], False, False, 0)
+        self.live["cache"] = Gtk.ProgressBar()
+        box.pack_start(self.live["cache"], False, False, 0)
+        self.live["cache_text"] = label("", "muted")
+        box.pack_start(self.live["cache_text"], False, False, 0)
+        if active["Offline"]:
+            box.pack_start(label(f'{active["Offline"]} item(ns) marcados para ficar off-line', "muted"), False, False, 0)
+        box.pack_start(button("Gerenciar espaço", lambda: self.show("storage"), "link"), False, False, 0)
+
+        box = self.card("Transferências agora", parent=right)
+        self.live["uploads"] = {}
+        for item in active.get("Uploads") or []:
+            box.pack_start(label("Enviando · " + item["Name"]), False, False, 0)
+            bar = Gtk.ProgressBar()
+            box.pack_start(bar, False, False, 0)
+            self.live["uploads"][item["Name"]] = bar
+        if active["Downloads"]:
+            box.pack_start(label("Baixando do Drive os arquivos abertos…", "muted"), False, False, 0)
+        if not active.get("Uploads") and not active["Downloads"]:
+            box.pack_start(label("Nenhuma transferência em andamento.", "muted"), False, False, 0)
+        box.pack_start(button("Ver atividade", lambda: self.show("activity"), "link"), False, False, 0)
+
+        errors = self.problems()
+        if errors:
+            box = self.card("Precisa de atenção", parent=right)
+            for detail in errors[:3]:
+                box.pack_start(label(detail, "muted"), False, False, 0)
+            box.pack_start(button("Ver tudo", lambda: self.show("notifications"), "link"), False, False, 0)
+
+    def accounts(self, active):
+        box = self.card("Contas do Google", "Cada conta aparece como uma pasta em GCP-Drive, na sua pasta pessoal.")
+        for row in self.rows:
+            account = horizontal(12)
+            account.get_style_context().add_class("row")
+            account.pack_start(Gtk.Image.new_from_icon_name(ICON, Gtk.IconSize.DND), False, False, 0)
+            details = vertical(2)
+            details.pack_start(label(row["Name"] or row["Email"]), False, False, 0)
+            details.pack_start(label(row["Email"], "muted"), False, False, 0)
+            text, kind = self.state_of(row)
+            details.pack_start(self.chip(text, kind), False, False, 0)
+            account.pack_start(details, True, True, 0)
+            account.pack_start(button("Abrir pasta", lambda item=row: open_value(item["Path"], self.window), "pill", "folder-open-symbolic"), False, False, 0)
+            if row != active:
+                account.pack_start(button("Ver no painel", lambda item=row: self.selected_account(item["ID"]), "pill"), False, False, 0)
+            account.pack_start(button("Desconectar", lambda item=row: self.disconnect(item), "link"), False, False, 0)
+            box.pack_start(account, False, False, 0)
+        row = horizontal()
+        row.pack_start(self.add_account_button("list-add-symbolic"), False, False, 0)
+        box.pack_start(row, False, False, 0)
+
+    def load_settings(self):
+        def receive(out, err):
+            if not err:
+                self.settings = json.loads(out)
+                self.version = self.settings.get("Version", self.version)
+                if self.window and self.page in ("preferences", "about"):
+                    self.render()
+        communicate(["settings"], receive)
+
+    def save_settings(self, **values):
+        def receive(out, err):
+            if err:
+                message(self.window, "Salvar configuração", err, True)
+            else:
+                self.settings = json.loads(out)
+        communicate(["settings", json.dumps(values)], receive)
+
+    def preferences(self, active):
+        if self.settings is None:
+            self.card("Preferências", "Carregando…")
+            return
+        speed = self.card("Velocidade da internet", "Abrir arquivos e pastas sempre tem prioridade. Envios e cópias off-line esperam enquanto você está usando a unidade.")
+        for key, title in (("DownKBps", "Limite de download"), ("UpKBps", "Limite de envio")):
+            row = horizontal(12)
+            row.pack_start(label(title), True, True, 0)
+            limited = Gtk.Switch()
+            limited.set_active(self.settings[key] > 0)
+            limited.set_valign(Gtk.Align.CENTER)
+            spin = Gtk.SpinButton.new_with_range(100, 1000000, 100)
+            spin.set_value(self.settings[key] or 5000)
+            spin.set_sensitive(self.settings[key] > 0)
+            unit = label("KB/s", "muted")
+
+            def apply(*_, key=key, limited=limited, spin=spin):
+                spin.set_sensitive(limited.get_active())
+                self.save_settings(**{key: int(spin.get_value()) if limited.get_active() else 0})
+            limited.connect("notify::active", apply)
+            spin.connect("value-changed", apply)
+            row.pack_start(spin, False, False, 0)
+            row.pack_start(unit, False, False, 0)
+            row.pack_start(limited, False, False, 0)
+            speed.pack_start(row, False, False, 0)
+        speed.pack_start(label("Desligado = sem limite, usa toda a velocidade disponível.", "muted"), False, False, 0)
+
+        space = self.card("Espaço neste computador", "Os arquivos que você abre ficam guardados aqui para abrir na hora da próxima vez. Os mais antigos saem sozinhos quando o limite é atingido.")
+        row = horizontal(12)
+        row.pack_start(label("Tamanho máximo"), True, True, 0)
+        size = Gtk.SpinButton.new_with_range(1, 500, 1)
+        size.set_value(self.settings["CacheGB"])
+        size.connect("value-changed", lambda item: self.save_settings(CacheGB=int(item.get_value())))
+        row.pack_start(size, False, False, 0)
+        row.pack_start(label("GB", "muted"), False, False, 0)
+        space.pack_start(row, False, False, 0)
+
+        mapping = self.card("Mapa de pastas", "O GCP-Drive lê a lista de pastas e arquivos da conta uma vez e depois acompanha só o que muda. Assim as pastas abrem sem esperar a internet.")
+        row = horizontal(12)
+        row.pack_start(label("Mapear a conta inteira em segundo plano"), True, True, 0)
+        premap = Gtk.Switch()
+        premap.set_active(self.settings["Premap"])
+        premap.set_valign(Gtk.Align.CENTER)
+        premap.connect("notify::active", lambda item, _: self.save_settings(Premap=item.get_active()))
+        row.pack_start(premap, False, False, 0)
+        mapping.pack_start(row, False, False, 0)
+
+        general = self.card("Geral")
+        auto = Gtk.CheckButton.new_with_label("Iniciar o GCP-Drive ao entrar no computador")
+        auto.set_active(not AUTOSTART.exists())
+        auto.connect("toggled", self.toggle_autostart)
+        general.pack_start(auto, False, False, 0)
+
+    def storage(self, active):
+        box = self.card("Espaço usado", "Veja quanto cada conta ocupa na nuvem e neste computador.")
+        if not active:
+            box.pack_start(self.add_account_button(), False, False, 0)
+            return
+        account = Gtk.ComboBoxText()
+        for row in self.rows:
+            account.append(row["ID"], row["Email"])
+        account.set_active_id(active["ID"])
+
+        def change(item):
+            self.selected = item.get_active_id()
+            self.show("storage")
+        account.connect("changed", change)
+        box.pack_start(account, False, False, 0)
+        if self.cloud_status and "Error" not in self.cloud_status:
+            quota = self.cloud_status
+            box.pack_start(label("No Google Drive"), False, False, 0)
+            if quota.get("Limit"):
+                bar = Gtk.ProgressBar()
+                bar.set_fraction(min(1.0, quota["Usage"] / quota["Limit"]))
+                box.pack_start(bar, False, False, 0)
+            limit = " de " + size_text(quota["Limit"]) if quota.get("Limit") else ""
+            box.pack_start(label(size_text(quota.get("Usage")) + limit + " usados", "muted"), False, False, 0)
+        if not self.local_status:
+            box.pack_start(label("Calculando…", "muted"), False, False, 0)
+            return
+        if "Error" in self.local_status:
+            box.pack_start(label(self.local_status["Error"]), False, False, 0)
+            return
+        local = self.local_status
+        box.pack_start(label("Neste computador"), False, False, 0)
+        bar = Gtk.ProgressBar()
+        bar.set_fraction(min(1.0, local["cache"]["Bytes"] / max(1, local["cache"]["Limit"])))
+        box.pack_start(bar, False, False, 0)
+        box.pack_start(label("Arquivos abertos recentemente: " + size_text(local["cache"]["Bytes"]) + " de " + size_text(local["cache"]["Limit"]), "muted"), False, False, 0)
+        box.pack_start(label(f'Cópias off-line: {local["offline"]["Files"]} arquivo(s), ' + size_text(local["offline"]["Bytes"]), "muted"), False, False, 0)
+        box.pack_start(label("Aguardando envio: " + size_text(local["pending"]["Bytes"]), "muted"), False, False, 0)
+        box.pack_start(label("Para manter um arquivo ou pasta off-line, clique nele com o botão direito no gerenciador de arquivos e escolha GCP-Drive → Disponibilizar off-line.", "muted"), False, False, 0)
+
+        def clear():
+            if confirm(self.window, "Liberar espaço desta conta?", "Os arquivos continuam no Google Drive e serão baixados de novo quando você abrir. As cópias off-line e os envios pendentes são mantidos."):
+                def receive(_, err):
+                    self.result("Liberar espaço", err, False)
+                    self.load_storage(active["ID"])
+                communicate(["clear-cache", active["ID"]], receive)
+        row = horizontal()
+        row.pack_start(button("Liberar espaço", clear, "pill", "edit-clear-all-symbolic"), False, False, 0)
+        box.pack_start(row, False, False, 0)
+
+    def activity(self, active):
+        box = self.card("Atividade")
+        if not active:
+            box.pack_start(label("Nenhuma conta conectada."), False, False, 0)
+            return
+        box.pack_start(label(active["Email"], "muted"), False, False, 0)
+        box.pack_start(self.chip(*self.state_of(active)), False, False, 0)
+        icons = {"Concluída": "emblem-ok-symbolic", "Falhou": "dialog-warning-symbolic", "Em andamento": "emblem-synchronizing-symbolic"}
+        for item in active.get("Activity") or []:
+            row = horizontal(12)
+            row.get_style_context().add_class("row")
+            row.pack_start(Gtk.Image.new_from_icon_name(icons.get(item["Status"], "dialog-information-symbolic"), Gtk.IconSize.BUTTON), False, False, 0)
+            details = vertical(2)
+            details.pack_start(label(item["Name"]), False, False, 0)
+            moment = datetime.fromisoformat(item["At"]).astimezone().strftime("%d/%m/%Y %H:%M")
+            details.pack_start(label(f'{item["Action"]} · {item["Status"]} · {moment}', "muted"), False, False, 0)
+            if item["Detail"]:
+                details.pack_start(label(item["Detail"], "muted"), False, False, 0)
+            row.pack_start(details, True, True, 0)
+            box.pack_start(row, False, False, 0)
+        if not active.get("Activity"):
+            box.pack_start(label("Nada por aqui ainda. Envios, cópias off-line e avisos aparecem nesta lista.", "muted"), False, False, 0)
+
+    def notifications(self):
+        box = self.card("Notificações")
+        for detail in self.problems() or ["Nenhum problema registrado."]:
+            box.pack_start(label(detail, "muted"), False, False, 0)
+
+
+def copy_drive_link(link):
+    commands = []
+    if os.environ.get("WAYLAND_DISPLAY"):
+        commands.append(["wl-copy", "--type", "text/plain;charset=utf-8"])
+    if os.environ.get("DISPLAY"):
+        commands.append(["xclip", "-selection", "clipboard"])
+    for command in commands:
+        try:
+            result = subprocess.run(command, input=link, text=True, timeout=5,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return True
+    clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    clipboard.set_text(link, -1)
+    clipboard.store()
+    return False
+
+
+def share_dialog(path, item, loop):
+    window = Gtk.Window(title="Compartilhar item")
+    window.set_icon_name(ICON)
+    window.set_default_size(590, 495)
+    window.set_position(Gtk.WindowPosition.CENTER)
+    window.get_style_context().add_class("opengdrive")
+    window.get_style_context().add_class("share-dialog")
+    window.connect("destroy", lambda *_: loop.quit())
+
+    panel = vertical(16)
+    panel.set_border_width(26)
+    window.add(panel)
+    panel.pack_start(label(f'Compartilhar “{item["Name"]}”', "share-title"), False, False, 0)
+
+    row = horizontal(8)
+    email = Gtk.Entry(placeholder_text="Adicionar por e-mail")
+    grantees = Gtk.ComboBoxText()
+    grantees.append("user", "Pessoa")
+    grantees.append("group", "Grupo")
+    grantees.set_active_id("user")
+    roles = Gtk.ComboBoxText()
+    role_titles = {"reader": "Leitor", "commenter": "Comentador", "writer": "Editor",
+                   "owner": "Proprietário", "organizer": "Administrador",
+                   "fileOrganizer": "Gerenciador de conteúdo"}
+    for role in ("reader", "commenter", "writer"):
+        roles.append(role, role_titles[role])
+    roles.set_active_id("reader")
+    row.pack_start(email, True, True, 0)
+    row.pack_start(grantees, False, False, 0)
+    row.pack_start(roles, False, False, 0)
+    invite = Gtk.Button(label="Enviar")
+    invite.get_style_context().add_class("primary")
+    row.pack_start(invite, False, False, 0)
+    panel.pack_start(row, False, False, 0)
+    feedback = label("", "muted")
+    panel.pack_start(feedback, False, False, 0)
+
+    panel.pack_start(label("Pessoas com acesso", "share-section"), False, False, 0)
+    scroll = Gtk.ScrolledWindow()
+    scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scroll.set_min_content_height(130)
+    people = vertical(12)
+    scroll.add(people)
+    panel.pack_start(scroll, True, True, 0)
+    panel.pack_start(Gtk.Separator(), False, False, 0)
+    panel.pack_start(label("Acesso geral", "share-section"), False, False, 0)
+    general_row = horizontal(10)
+    general_icon = Gtk.Image.new_from_icon_name("changes-prevent-symbolic", Gtk.IconSize.BUTTON)
+    general_row.pack_start(general_icon, False, False, 0)
+    general = label("Carregando…")
+    general_row.pack_start(general, True, True, 0)
+    panel.pack_start(general_row, False, False, 0)
+
+    footer = horizontal(8)
+    copied = Gtk.Button(label="Copiar link")
+    copied.set_image(Gtk.Image.new_from_icon_name("insert-link-symbolic", Gtk.IconSize.BUTTON))
+    copied.set_always_show_image(True)
+    copied.get_style_context().add_class("pill")
+    footer.pack_start(copied, False, False, 0)
+    done = button("Concluído", window.destroy, "primary")
+    footer.pack_end(done, False, False, 0)
+    footer.pack_end(button("Gerenciar no Drive", lambda: communicate(
+        ["context", "web", path], lambda _, err: feedback.set_text(err or "")), "link"), False, False, 0)
+    panel.pack_start(footer, False, False, 0)
+
+    open_window = True
+    can_share = False
+    sending = False
+
+    def closed(*_):
+        nonlocal open_window
+        open_window = False
+    window.connect("destroy", closed)
+
+    def update_invite(*_):
+        invite.set_sensitive(can_share and not sending and bool(email.get_text().strip()))
+
+    def load_permissions():
+        for child in people.get_children():
+            child.destroy()
+        people.pack_start(label("Carregando permissões…", "muted"), False, False, 0)
+        people.show_all()
+
+        def received(out, error):
+            nonlocal can_share
+            if not open_window:
+                return
+            for child in people.get_children():
+                child.destroy()
+            if error:
+                can_share = False
+                email.set_sensitive(False)
+                grantees.set_sensitive(False)
+                roles.set_sensitive(False)
+                people.pack_start(label("Não foi possível consultar as permissões.", "muted"), False, False, 0)
+                general.set_text("Não foi possível verificar o acesso geral.")
+                feedback.set_text(error)
+            else:
+                data = json.loads(out)
+                can_share = data["CanShare"]
+                email.set_sensitive(can_share)
+                grantees.set_sensitive(can_share)
+                roles.set_sensitive(can_share)
+                entries = [p for p in data["Permissions"] if not p["Deleted"]]
+                visible = [p for p in entries if p["Type"] in ("user", "group")]
+                if not visible:
+                    people.pack_start(label("Nenhuma pessoa ou grupo aparece nesta conta.", "muted"), False, False, 0)
+                for person in visible:
+                    person_row = horizontal(12)
+                    avatar = Gtk.Image.new_from_icon_name("avatar-default-symbolic", Gtk.IconSize.DIALOG)
+                    avatar.get_style_context().add_class("share-avatar")
+                    person_row.pack_start(avatar, False, False, 0)
+                    details = vertical(2)
+                    address = person["EmailAddress"]
+                    name = person["DisplayName"] or address or "Conta do Google"
+                    details.pack_start(label(name), False, False, 0)
+                    if address and address != name:
+                        details.pack_start(label(address, "muted"), False, False, 0)
+                    person_row.pack_start(details, True, True, 0)
+                    person_row.pack_end(label(role_titles.get(person["Role"], "Acesso concedido"), "muted"), False, False, 0)
+                    people.pack_start(person_row, False, False, 0)
+                anyone = next((p for p in entries if p["Type"] == "anyone"), None)
+                domains = [p["Domain"] or p["DisplayName"] for p in entries if p["Type"] == "domain"]
+                if anyone:
+                    general_icon.set_from_icon_name("web-browser-symbolic", Gtk.IconSize.BUTTON)
+                    general.set_text("Público" if anyone["AllowFileDiscovery"] else "Qualquer pessoa com o link")
+                elif domains:
+                    general_icon.set_from_icon_name("system-users-symbolic", Gtk.IconSize.BUTTON)
+                    general.set_text("Acesso na organização " + ", ".join(filter(None, domains)))
+                else:
+                    general.set_text("Restrito. Só quem tem acesso pode abrir pelo link.")
+                if not can_share:
+                    feedback.set_text("Sua conta pode consultar as permissões deste item.")
+            people.show_all()
+            update_invite()
+        communicate(["context", "sharing", path], received)
+
+    def send_invite(*_):
+        nonlocal sending
+        if not invite.get_sensitive():
+            return
+        sending = True
+        feedback.set_text("Enviando convite pelo Google Drive…")
+        update_invite()
+
+        def sent(_, error):
+            nonlocal sending
+            sending = False
+            if not open_window:
+                return
+            feedback.set_text(error or "Convite enviado.")
+            if not error:
+                email.set_text("")
+                load_permissions()
+            update_invite()
+        communicate(["context", "share", path, email.get_text().strip(),
+                     roles.get_active_id(), grantees.get_active_id()], sent)
+
+    def copy_link(*_):
+        def received(out, error):
+            if not open_window:
+                return
+            if error:
+                feedback.set_text(error)
+                return
+            copy_drive_link(out.strip())
+            copied.set_label("Link copiado")
+        communicate(["context", "link", path], received)
+
+    invite.connect("clicked", send_invite)
+    email.connect("activate", send_invite)
+    email.connect("changed", update_invite)
+    copied.connect("clicked", copy_link)
+    email.set_sensitive(False)
+    grantees.set_sensitive(False)
+    roles.set_sensitive(False)
+    update_invite()
+    window.show_all()
+    load_permissions()
+
+
+def context_path(value):
+    if os.path.isabs(value):
+        return value
+    uri = urlsplit(value)
+    if uri.scheme == "file" and uri.netloc in ("", "localhost"):
+        path = unquote(uri.path)
+        if os.path.isabs(path):
+            return path
+    if uri.scheme in ("recentlyused", "baloosearch", "filenamesearch"):
+        kio = shutil.which("kioclient") or shutil.which("kioclient6") or shutil.which("kioclient5")
+        if kio:
+            try:
+                status = subprocess.run([kio, "stat", value], check=True, capture_output=True,
+                                        text=True, timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                status = None
+            if status:
+                fields = dict((line[:20].strip(), line[22:]) for line in status.stdout.splitlines() if len(line) > 22)
+                if os.path.isabs(fields.get("LOCAL_PATH", "")):
+                    return fields["LOCAL_PATH"]
+                target = urlsplit(fields.get("TARGET_URL") or fields.get("URL", ""))
+                if target.scheme == "file" and target.netloc in ("", "localhost") and target.path.startswith("/"):
+                    return unquote(target.path)
+    raise ValueError("Abra a pasta na unidade montada e repita a ação.")
+
+
+def context_action(action, path):
+    try:
+        path = context_path(path)
+    except ValueError as error:
+        message(None, NAME, str(error), True)
+        return
+    loop = GLib.MainLoop()
+    window = None
+
+    def finish(out, err):
+        if err:
+            message(window, NAME, err, True)
+        elif action == "link":
+            if not copy_drive_link(out.strip()):
+                message(window, "Link copiado", "Cole o link no aplicativo de destino.")
+        elif action == "gemini":
+            message(window, "Gemini no Google Drive", "Abra o painel do Gemini no Drive para Web, se a sua conta tiver acesso.")
+        elif action in ("pin", "unpin", "share", "shortcut", "upload"):
+            titles = {"pin": "Será mantido off-line", "unpin": "Cópia off-line liberada",
+                      "share": "Permissão concedida", "shortcut": "Atalho adicionado", "upload": "Arquivo enviado"}
+            message(window, titles[action])
+        loop.quit()
+
+    def execute(args):
+        communicate(["context", action, path, *args], finish)
+
+    def describe(out, err):
+        if err:
+            finish(None, err)
+            return
+        item = json.loads(out)
+        if action == "share":
+            if item.get("Provider"):
+                communicate(["context", "web", path], finish_web_share)
+            else:
+                share_dialog(path, item, loop)
+        elif action == "upload":
+            file = choose_file(window, "Enviar arquivo para esta pasta")
+            if file:
+                execute([file])
+            else:
+                loop.quit()
+
+    def finish_web_share(_, error):
+        if error:
+            message(window, "Abrir na nuvem", error, True)
+        loop.quit()
+
+    def start():
+        if action in ("share", "upload"):
+            communicate(["context", "describe", path], describe)
+        else:
+            execute([])
+        return GLib.SOURCE_REMOVE
+
+    GLib.idle_add(start)
+    loop.run()
+
+
+def main():
+    screen = Gdk.Screen.get_default()
+    if screen is None:
+        startup_error("Abra o GCP-Drive dentro da sua sessão gráfica.",
+                      RuntimeError("O GTK não encontrou uma tela disponível."))
+        return 1
+    try:
+        provider = Gtk.CssProvider()
+        provider.load_from_path(str(Path(__file__).with_name("style.css")))
+        Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    except GLib.Error as error:
+        startup_error("Não foi possível carregar o tema da interface.", error)
+    if len(sys.argv) == 4 and sys.argv[1] == "--context":
+        context_action(sys.argv[2], sys.argv[3])
+        return 0
+    return Dashboard().run(sys.argv)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception as error:
+        startup_error("Não foi possível iniciar a interface.", error, notify=True)
+        sys.exit(1)

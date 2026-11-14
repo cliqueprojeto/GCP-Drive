@@ -1,0 +1,28 @@
+[Desktop Entry]
+Type=Application
+Name=GCP-Drive
+Comment=Acesse e sincronize suas contas do Google Drive
+GenericName=Google Drive
+GenericName[pt_BR]=Cliente do Google Drive
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive
+TryExec=/usr/bin/gcp-drive
+Terminal=false
+Categories=Network;FileTransfer;
+StartupNotify=true
+StartupWMClass=Opengdrive-ui
+Keywords=Google;Drive;Cloud;Sync;
+
+Actions=SoftwareRender;AmdRender;IntegratedRender;
+
+[Desktop Action SoftwareRender]
+Name=Software Render
+Exec=SoftwareRender /usr/bin/gcp-drive
+
+[Desktop Action AmdRender]
+Name=Amd Render
+Exec=AmdRender /usr/bin/gcp-drive
+
+[Desktop Action IntegratedRender]
+Name=Integrated Render
+Exec=IntegratedRender /usr/bin/gcp-drive

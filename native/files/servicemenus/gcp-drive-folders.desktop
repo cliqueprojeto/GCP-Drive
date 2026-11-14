@@ -1,0 +1,44 @@
+[Desktop Entry]
+Type=Service
+MimeType=inode/directory;
+ServiceTypes=KonqPopupMenu/Plugin
+X-KDE-Submenu=GCP-Drive
+X-KDE-Protocols=file,recentlyused,baloosearch,filenamesearch
+X-KDE-RequiredNumberOfUrls=1
+Icon=gcp-drive
+Actions=folder-web;folder-link;folder-share;folder-shortcut;folder-upload;folder-pin;folder-unpin;
+
+[Desktop Action folder-web]
+Name=Abrir na nuvem
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context web %u
+
+[Desktop Action folder-link]
+Name=Copiar link da pasta
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context link %u
+
+[Desktop Action folder-share]
+Name=Compartilhar pasta
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context share %u
+
+[Desktop Action folder-shortcut]
+Name=Adicionar atalho a Meu Drive
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context shortcut %u
+
+[Desktop Action folder-upload]
+Name=Enviar arquivo para esta pasta
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context upload %u
+
+[Desktop Action folder-pin]
+Name=Manter esta pasta off-line
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context pin %u
+
+[Desktop Action folder-unpin]
+Name=Deixar de manter off-line
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --context unpin %u

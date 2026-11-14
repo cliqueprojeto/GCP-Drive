@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GCP-Drive
+Comment=Montar as unidades do Google Drive ao entrar no computador
+Icon=gcp-drive
+Exec=/usr/bin/gcp-drive-ui --autostart
+TryExec=/usr/bin/gcp-drive-ui
+Terminal=false
+X-GNOME-Autostart-enabled=true

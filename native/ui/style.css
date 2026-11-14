@@ -1,0 +1,79 @@
+@define-color gcp_accent #7c4dff;
+@define-color gcp_accent_soft alpha(#7c4dff, 0.14);
+@define-color gcp_line alpha(@theme_fg_color, 0.10);
+
+.opengdrive {
+  background-color: @theme_bg_color;
+  color: @theme_fg_color;
+  font-family: Inter, Roboto, "Noto Sans", sans-serif;
+  font-size: 14px;
+}
+.opengdrive label.brand { font-size: 23px; font-weight: 700; letter-spacing: -0.4px; }
+.opengdrive label.heading { font-size: 19px; font-weight: 600; letter-spacing: -0.2px; }
+.opengdrive label.muted { color: alpha(@theme_fg_color, 0.66); }
+.opengdrive entry.search { border-radius: 100px; padding: 9px 17px; border: 1px solid @gcp_line; }
+.opengdrive entry.search:focus { border-color: @gcp_accent; box-shadow: 0 0 0 3px @gcp_accent_soft; }
+
+.opengdrive .card {
+  background-color: @theme_base_color;
+  color: @theme_text_color;
+  border: 1px solid @gcp_line;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 1px 2px alpha(black, 0.06), 0 8px 24px alpha(black, 0.05);
+}
+.opengdrive .card.hero {
+  background-image: linear-gradient(135deg, alpha(@gcp_accent, 0.16), alpha(@gcp_accent, 0.02) 60%);
+  border-color: alpha(@gcp_accent, 0.30);
+}
+.opengdrive .stat {
+  background-color: alpha(@theme_fg_color, 0.045);
+  border-radius: 14px;
+  padding: 12px 16px;
+}
+.opengdrive label.stat-value { font-size: 22px; font-weight: 700; font-feature-settings: "tnum"; }
+.opengdrive .row { padding: 10px 0; border-bottom: 1px solid @gcp_line; }
+
+.opengdrive label.chip { border-radius: 100px; padding: 3px 12px; font-size: 12.5px; font-weight: 600; }
+.opengdrive label.chip.ok { background-color: alpha(#1fa971, 0.16); color: #14784f; }
+.opengdrive label.chip.busy { background-color: @gcp_accent_soft; color: @gcp_accent; }
+.opengdrive label.chip.idle { background-color: alpha(@theme_fg_color, 0.09); color: alpha(@theme_fg_color, 0.75); }
+.opengdrive label.chip.warn { background-color: alpha(#e5484d, 0.15); color: #c2333a; }
+
+.opengdrive button { min-height: 34px; border-radius: 10px; }
+.opengdrive button label { color: inherit; }
+.opengdrive button.toolbar { min-width: 36px; min-height: 38px; border-radius: 100px; }
+.opengdrive button.open-drive {
+  border-radius: 14px; padding: 12px 16px; font-weight: 600;
+  background-image: none; background-color: @gcp_accent; color: white; border: none;
+}
+.opengdrive button.open-drive:hover { background-color: shade(@gcp_accent, 1.08); }
+.opengdrive button.nav { border-radius: 12px; padding: 6px 14px; border: none; background-image: none; background-color: transparent; box-shadow: none; }
+.opengdrive button.nav:hover { background-color: alpha(@theme_fg_color, 0.06); }
+.opengdrive button.nav.selected { background-color: @gcp_accent_soft; color: @gcp_accent; font-weight: 600; }
+.opengdrive button.primary {
+  background-image: none; background-color: @gcp_accent; color: white; border: none;
+  border-radius: 100px; padding: 5px 18px; font-weight: 600;
+}
+.opengdrive button.primary:hover { background-color: shade(@gcp_accent, 1.08); }
+.opengdrive button.primary:disabled { background-color: alpha(@gcp_accent, 0.45); }
+.opengdrive button.pill,
+.opengdrive button.account { border-radius: 100px; padding: 3px 14px; }
+.opengdrive button.link { color: @gcp_accent; background-image: none; background-color: transparent; border: none; box-shadow: none; padding: 0 2px; }
+.opengdrive button.link:hover { text-decoration: underline; }
+
+.opengdrive progressbar trough { min-height: 8px; border-radius: 100px; background-color: alpha(@theme_fg_color, 0.10); border: none; }
+.opengdrive progressbar progress { min-height: 8px; border-radius: 100px; background-image: none; background-color: @gcp_accent; border: none; }
+.opengdrive switch:checked { background-color: @gcp_accent; }
+
+.opengdrive.share-dialog { background-color: @theme_base_color; color: @theme_text_color; }
+.opengdrive .share-title { font-size: 22px; font-weight: 600; }
+.opengdrive .share-section { font-size: 16px; font-weight: 600; }
+.opengdrive .share-avatar { border-radius: 24px; padding: 7px; background-color: @gcp_accent_soft; }
+.opengdrive.share-dialog entry { padding: 9px; }
+.opengdrive .support-card {
+  padding: 14px;
+  border: 1px solid @gcp_line;
+  border-radius: 14px;
+  background-color: alpha(@theme_fg_color, 0.03);
+}

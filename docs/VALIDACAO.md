@@ -70,3 +70,24 @@ Não executado: Nautilus e Nemo reais (sem Linux gráfico nesta máquina), temas
 - `npm run test:disconnect` passou em perfil isolado no KDE, com rclone e alias local. Listagem, renomeação, favorito e desconexão preservaram o arquivo de origem. O ensaio também exercitou o ícone genérico em caso de falha do ícone nativo.
 - Sonda RC em montagem FUSE isolada observou uma leitura de 1 MiB em andamento e a conclusão em RFC 3339 com deslocamento `-03:00`. Uma cópia local isolada via RC também confirmou o formato. O parser de Atividade agora aceita esse formato.
 - `npm run typecheck`, `npm test` (36 testes) e `npm run build` passaram com a cadeia de ferramentas fixada.
+
+## Seleção de pastas locais
+
+- No BigLinux, `npm run typecheck`, `npm test` (36 testes) e `npm run build` passaram. `npm run test:sync` verificou com rclone e pastas locais a prévia sem cópia, a sincronização nos dois sentidos, a edição e a preservação de versões concorrentes.
+- O pacote local Arch/Manjaro x86_64 da beta.6 foi gerado com makepkg. A validação do arquivo desktop, do modo do sandbox, do executável rclone, dos metadados do pacote e do SHA-256 passou.
+
+- Na beta.7, a verificação de tipos, os 36 testes e a compilação passaram. O pacote Arch/Manjaro passou na conferência dos metadados, das permissões do sandbox e do rclone, do arquivo desktop e do SHA-256.
+
+## Motor nativo FUSE — 0.5.0 (13 de novembro de 2026)
+
+Executado no BigLinux (base Manjaro, KDE, kernel 6.18.55), Go 1.27.4. Código em [native/](../native/README.md).
+
+Medido na 0.4.3 instalada, com contas Google reais e somente leitura: um arquivo de 4,4 MB levou 9,0 s na primeira leitura e 5,0 s na segunda; os primeiros 4 KiB de seis arquivos levaram 14,9 s em sequência; oito pastas ainda não visitadas levaram 2,3 s em sequência e 0,35 s em paralelo; pastas já visitadas responderam em 4–54 ms. O histórico do serviço registrava 26 leituras canceladas em três contas.
+
+Executado na 0.5.0:
+
+- `go vet ./...` sem avisos. `go test -race -count=2 ./...` passou. O teste monta uma unidade FUSE real contra um Google Drive simulado em memória e cobre: listagem da raiz e de `Meu Drive`, atalho `.desktop` de documento Google, leitura de um arquivo de 5 blocos em no máximo 4 requisições, releitura após remontagem sem nenhuma requisição, criação e envio de arquivo, salvar por temporário + renomear como revisão do mesmo item, edição no lugar, arquivo de trava mantido local, criação de pasta, mover, excluir para a lixeira e remoção de pasta vazia.
+- As sete páginas da interface foram renderizadas com dados de exemplo em janela fora da tela, sem exceções, e conferidas por captura.
+- `package.sh` gerou `.pkg.tar.zst`, `.deb` e `.rpm`. Conferidos: lista de arquivos, dono `root`, permissões dos executáveis, dependências declaradas e SHA-256.
+
+Não executado: o motor 0.5.0 contra contas Google reais (leitura, gravação, mapa completo, limites de banda, conflito de versões), instalação dos pacotes, atualização a partir da 0.4.3, Dolphin/Nautilus/Nemo com a unidade nova, bandeja, login OAuth, Debian/Ubuntu e Fedora. O Drive simulado não reproduz latência, cota nem erros do Google. Não há versão para Windows ou macOS deste motor.
