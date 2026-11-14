@@ -35,6 +35,9 @@ func (e Error) Error() string {
 	return fmt.Sprintf("HRESULT 0x%08X", uint32(e))
 }
 
+// ErrCanceled answers a transfer whose reader gave up; it is not a failure of the provider.
+const ErrCanceled = Error(0x8007018E)
+
 func check(r uintptr) error {
 	if int32(r) >= 0 {
 		return nil
