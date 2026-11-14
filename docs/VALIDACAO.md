@@ -152,3 +152,23 @@ Duas execuções anteriores falharam na parte das alterações remotas: o Window
 No Linux, `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado depois dessas mudanças. O teste FUSE precisou ser iniciado por `systemd-run --user`, porque o terminal usado na sessão não permitia `fusermount3`.
 
 Não executado: Explorer (ícones, painel de navegação, progresso, cancelamento por interface), cancelamento de leitura em andamento, pastas grandes (o envio em lotes de 2.000 entradas não foi exercitado), `Compartilhados comigo` e drives compartilhados com conteúdo, o feed `changes.list` de verdade (as alterações foram injetadas direto no mapa), renomeação remota, falha de rede, serviço e socket de controle no Windows, limite de cache, Windows 10, ARM, contas Google reais. O conteúdo baixado fica no próprio arquivo e também no cache de blocos, até o limite configurado do cache; "Liberar espaço" ainda não existe.
+
+## Motor nativo para Windows — fase 3, gravação na pasta da conta (14 de novembro de 2026)
+
+Ainda não há instalador, painel nem integração com o Explorer para Windows.
+
+Executado no GitHub Actions, runner `windows-latest` (Windows 10.0.26100), workflow `Native engine (Windows)`, execução 43597129791, uma única execução. O teste `TestEngineWindows` repete as verificações da fase 2 e, em seguida, altera a pasta por um segundo processo, contra o Google Drive simulado em memória:
+
+- Arquivo novo criado na pasta chegou ao Drive simulado com o mesmo conteúdo e passou a constar como placeholder sincronizado (`CfGetPlaceholderInfo`), ainda legível.
+- Salvar por arquivo temporário e renomear sobre um arquivo existente gerou nova revisão do mesmo item; o temporário não foi enviado.
+- Edição no lugar de um arquivo já baixado gerou nova revisão do mesmo item, e o arquivo voltou ao estado sincronizado.
+- Arquivo de trava de editor (`.~lock.…#`) não foi enviado.
+- Pasta nova foi criada no Drive simulado; um arquivo movido e renomeado para dentro dela foi movido no Drive, sem cópia sob o nome antigo; arquivo e pasta apagados foram para a lixeira do Drive simulado.
+- Uma renomeação feita no Drive apareceu na pasta e não foi devolvida ao Drive como renomeação local.
+- Ao final a fila de envio estava vazia e o motor não registrou nenhuma falha.
+
+O Drive simulado dos testes passou a guardar a data de modificação enviada junto com o conteúdo, como o Google Drive faz; antes devolvia a hora do envio.
+
+No Linux, `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado depois dessas mudanças (iniciado por `systemd-run --user`). A criação de pastas e o envio à lixeira passaram a usar funções comuns aos dois sistemas.
+
+Não executado: conflito de versões (edição local e remota do mesmo arquivo) e o descarte da cópia local depois de o conflito ser salvo; alterações feitas com o serviço parado (o levantamento da pasta na partida roda no teste, mas sem nada a encontrar); arquivo mantido aberto por um programa durante a gravação; cópia de arquivo grande pelo Explorer; exclusão ou movimentação de pasta com conteúdo; itens sem permissão de edição, `Compartilhados comigo` e drives compartilhados; mover para fora da pasta da conta; estouro do buffer do vigia de alterações; falha de rede durante o envio; renomear ou mover antes de o envio terminar; Office, LibreOffice ou qualquer programa gráfico; ícones de estado no Explorer; Windows 10; contas Google reais. Não foi medido o custo de comparar pastas grandes: cada comparação consulta o estado de cada entrada da pasta. Cada arquivo em envio ocupa, até terminar, uma cópia temporária do seu tamanho na área de dados do aplicativo.
