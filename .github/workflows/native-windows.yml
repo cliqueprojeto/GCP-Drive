@@ -1,8 +1,14 @@
 name: Native engine (Windows)
 on:
   workflow_dispatch:
+    inputs:
+      draft_release:
+        description: Anexar o instalador a um rascunho de versão não publicado
+        type: boolean
+        default: false
 permissions:
-  contents: read
+  # Writing is used only to attach the installer to a draft release, when asked.
+  contents: write
 jobs:
   test:
     name: Cloud Files integration
@@ -48,3 +54,17 @@ jobs:
           path: native/windows/build/GCP-Drive-*-instalador.exe
           retention-days: 14
           if-no-files-found: error
+      # A draft is visible only to who can write to the repository; nothing is published.
+      - name: Attach the installer to a draft release
+        if: ${{ inputs.draft_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $file = (Get-ChildItem windows\build\GCP-Drive-*-instalador.exe | Select-Object -First 1).FullName
+          gh release view windows-teste --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create windows-teste --repo $env:GITHUB_REPOSITORY --draft --target $env:GITHUB_SHA --title "GCP-Drive para Windows - rascunho de teste" --notes "Instalador de teste gerado pelo workflow Native engine (Windows). Não foi homologado numa área de trabalho do Windows; veja docs/VALIDACAO.md. Não traz cadastro do Google."
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          gh release upload windows-teste $file --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit 1 }
