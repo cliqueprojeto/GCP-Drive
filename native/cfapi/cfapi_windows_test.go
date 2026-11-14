@@ -2,7 +2,9 @@ package cfapi
 
 import (
 	"bytes"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +16,55 @@ import (
 )
 
 type span struct{ off, n int64 }
+
+// The platform does not ask a provider to fill folders for the provider's own process, so the test
+// reads the sync root the way the Explorer would: from another process, which is this binary again.
+func TestMain(m *testing.M) {
+	path := os.Getenv("GCP_DRIVE_CF_PATH")
+	switch os.Getenv("GCP_DRIVE_CF_HELPER") {
+	case "":
+		os.Exit(m.Run())
+	case "list":
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			os.Stderr.WriteString(err.Error())
+			os.Exit(1)
+		}
+		var out []string
+		for _, e := range entries {
+			out = append(out, e.Name())
+		}
+		sort.Strings(out)
+		os.Stdout.WriteString(strings.Join(out, "|"))
+	case "head", "read":
+		file, err := os.Open(path)
+		if err == nil {
+			if os.Getenv("GCP_DRIVE_CF_HELPER") == "head" {
+				_, err = io.CopyN(os.Stdout, file, 4096)
+			} else {
+				_, err = io.Copy(os.Stdout, file)
+			}
+		}
+		if err != nil {
+			os.Stderr.WriteString(err.Error())
+			os.Exit(1)
+		}
+	}
+	os.Exit(0)
+}
+
+func other(t *testing.T, op, path string) []byte {
+	t.Helper()
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "GCP_DRIVE_CF_HELPER="+op, "GCP_DRIVE_CF_PATH="+path)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%s %s from another process: %v %s", op, path, err, stderr.String())
+	}
+	return out
+}
 
 // TestSyncRoot registers a sync root in a temporary folder and serves it from memory:
 // on-demand folder listing, on-demand content, and a second read that asks for nothing.
@@ -118,18 +169,7 @@ func TestSyncRoot(t *testing.T) {
 		}
 		return len(fetched), len(listed)
 	}
-	names := func(dir string) string {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatalf("listing %s: %v", dir, err)
-		}
-		var out []string
-		for _, e := range entries {
-			out = append(out, e.Name())
-		}
-		sort.Strings(out)
-		return strings.Join(out, "|")
-	}
+	names := func(dir string) string { return string(other(t, "list", dir)) }
 	attrs := func(path string) uint32 {
 		p, _ := windows.UTF16PtrFromString(path)
 		a, err := windows.GetFileAttributes(p)
@@ -166,25 +206,15 @@ func TestSyncRoot(t *testing.T) {
 	}
 
 	// Reading the first bytes asks for a part of the file, not all of it.
-	file, err := os.Open(pdf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	head := make([]byte, 4096)
-	if _, err := file.Read(head); err != nil {
-		t.Fatalf("first read: %v", err)
-	}
-	file.Close()
-	if !bytes.Equal(head, big[:4096]) {
+	if head := other(t, "head", pdf); !bytes.Equal(head, big[:4096]) {
 		t.Fatal("first bytes differ")
 	}
 	mu.Lock()
 	t.Logf("FETCH_DATA after reading 4 KiB of %d bytes: %+v", len(big), fetched)
 	mu.Unlock()
 
-	got, err := os.ReadFile(pdf)
-	if err != nil || !bytes.Equal(got, big) {
-		t.Fatalf("content differs: %v", err)
+	if got := other(t, "read", pdf); !bytes.Equal(got, big) {
+		t.Fatal("content differs")
 	}
 	requests, _ := snapshot()
 	mu.Lock()
@@ -193,14 +223,18 @@ func TestSyncRoot(t *testing.T) {
 	t.Logf("attributes after reading: 0x%X", attrs(pdf))
 
 	// The second read is served by the disk.
-	if again, err := os.ReadFile(pdf); err != nil || !bytes.Equal(again, big) {
-		t.Fatalf("second read differs: %v", err)
+	if again := other(t, "read", pdf); !bytes.Equal(again, big) {
+		t.Fatal("second read differs")
 	}
 	if n, _ := snapshot(); n != requests {
 		t.Fatalf("second read asked for data again: %d → %d", requests, n)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "Projetos", "nota.txt")); err != nil || !bytes.Equal(data, note) {
-		t.Fatalf("small file: %q %v", data, err)
+	if data := other(t, "read", filepath.Join(root, "Projetos", "nota.txt")); !bytes.Equal(data, note) {
+		t.Fatalf("small file: %q", data)
+	}
+	// The provider's own process can read too.
+	if own, err := os.ReadFile(pdf); err != nil || !bytes.Equal(own, big) {
+		t.Errorf("read by the provider process: %v", err)
 	}
 	requests, _ = snapshot()
 
@@ -217,8 +251,8 @@ func TestSyncRoot(t *testing.T) {
 		windows.CloseHandle(h)
 		t.Logf("CfDehydratePlaceholder: %v; attributes 0x%X", err, attrs(pdf))
 		if err == nil {
-			if again, err := os.ReadFile(pdf); err != nil || !bytes.Equal(again, big) {
-				t.Errorf("read after dehydration differs: %v", err)
+			if again := other(t, "read", pdf); !bytes.Equal(again, big) {
+				t.Error("read after dehydration differs")
 			}
 			n, _ := snapshot()
 			t.Logf("FETCH_DATA calls after dehydration and a new read: %d → %d", requests, n)
