@@ -402,6 +402,9 @@ func (m *Mount) send(ctx context.Context, p *Pending) {
 			f, err = m.drive.upload(ctx, "", meta, p.data(), progress)
 			if err == nil {
 				m.log("Conflito de versões", name, "Concluída", "A sua versão foi salva como “"+meta["name"].(string)+"”.")
+				// The folder shows the Drive's version again; what was written here is in the copy.
+				m.superseded(p.FileID, info)
+				m.meta.apply(current)
 			}
 		} else if err == nil {
 			f, err = m.drive.upload(ctx, p.FileID, meta, p.data(), progress)
@@ -525,15 +528,33 @@ func (m *Mount) removeEntry(ctx context.Context, dir, name string, wantDir bool)
 			return 0
 		}
 	}
-	// Removal goes to the Drive's trash, where it can be restored for 30 days.
-	if _, err := m.drive.patch(ctx, e.It.ID, map[string]any{"trashed": true}, nil); err != nil {
+	return errno(m.trash(ctx, e.It.ID, name))
+}
+
+// trash sends an item to the Drive's trash, where it can be restored for 30 days.
+func (m *Mount) trash(ctx context.Context, id, name string) error {
+	if _, err := m.drive.patch(ctx, id, map[string]any{"trashed": true}, nil); err != nil {
 		m.problem("Mover para a lixeira", name, err)
-		return errno(err)
+		return err
 	}
-	m.discard(ctx, e.It.ID)
-	m.meta.remove(e.It.ID)
+	m.discard(ctx, id)
+	m.meta.remove(id)
 	m.log("Mover para a lixeira", name, "Concluída", "")
-	return 0
+	return nil
+}
+
+// makeDir creates a folder inside the Drive folder dir.
+func (m *Mount) makeDir(ctx context.Context, dir, name string) (*Item, syscall.Errno) {
+	f, err := m.drive.create(ctx, map[string]any{"name": name, "mimeType": mimeFolder, "parents": []string{dir}})
+	if err != nil {
+		m.problem("Criar pasta", name, err)
+		return nil, errno(err)
+	}
+	m.meta.apply(f)
+	m.meta.mu.Lock()
+	m.meta.Loaded[f.ID] = true
+	m.meta.mu.Unlock()
+	return m.meta.item(f.ID), 0
 }
 
 // rename moves or renames an entry between the folders from and to. When a temporary file replaces an

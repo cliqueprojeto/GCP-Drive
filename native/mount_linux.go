@@ -80,3 +80,6 @@ func (m *Mount) detach() {
 
 // forget removes the folder of a disconnected account.
 func (m *Mount) forget() { os.Remove(m.path) }
+
+// superseded has nothing to do here: once the conflict copy is in the Drive the mount shows the Drive's version.
+func (m *Mount) superseded(string, os.FileInfo) {}

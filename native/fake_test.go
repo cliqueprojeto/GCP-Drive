@@ -86,10 +86,13 @@ func (f *fakeDrive) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/upload/files") && r.Method != "PUT":
 		var file apiFile
 		json.NewDecoder(r.Body).Decode(&file)
+		// The Drive keeps the modification time the client sends with the content.
+		modified := file.ModifiedTime
 		if id := strings.TrimPrefix(path, "/upload/files/"); id != path {
 			existing := *f.files[id]
 			file = existing
 		}
+		file.ModifiedTime = modified
 		f.seq++
 		key := fmt.Sprintf("s%d", f.seq)
 		f.sessions[key] = &file
@@ -100,7 +103,9 @@ func (f *fakeDrive) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sum := md5.Sum(data)
 		file.MD5, file.Size, file.OwnedByMe = hex.EncodeToString(sum[:]), strconv.Itoa(len(data)), true
 		file.Capabilities.CanEdit = true
-		file.ModifiedTime = time.Now().UTC().Format(time.RFC3339)
+		if file.ModifiedTime == "" {
+			file.ModifiedTime = time.Now().UTC().Format(time.RFC3339)
+		}
 		if file.MimeType == "" {
 			file.MimeType = "application/octet-stream"
 		}

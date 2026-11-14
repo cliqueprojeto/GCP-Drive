@@ -24,6 +24,7 @@ var (
 	procDehydratePlaceholder   = cldapi.NewProc("CfDehydratePlaceholder")
 	procSetInSyncState         = cldapi.NewProc("CfSetInSyncState")
 	procUpdatePlaceholder      = cldapi.NewProc("CfUpdatePlaceholder")
+	procGetPlaceholderInfo     = cldapi.NewProc("CfGetPlaceholderInfo")
 )
 
 // Error is a failed HRESULT.
@@ -542,15 +543,70 @@ type fsMetadata struct {
 var _ [48]byte = [unsafe.Sizeof(fsMetadata{})]byte{}
 
 // Update gives an in-sync file placeholder a new size, time and identity and releases its old content.
-// It fails when the placeholder has local changes.
-func Update(handle windows.Handle, size int64, modified time.Time, identity []byte) error {
+// It fails when the placeholder has local changes, unless discard is set: then those changes are dropped.
+func Update(handle windows.Handle, size int64, modified time.Time, identity []byte, discard bool) error {
 	t := filetime(modified)
 	meta := fsMetadata{CreationTime: t, LastAccessTime: t, LastWriteTime: t, ChangeTime: t, FileAttributes: fileAttributeNormal, FileSize: size}
 	const verifyInSync, markInSync, dehydrate = 1, 2, 4
+	flags := uintptr(verifyInSync | markInSync | dehydrate)
+	if discard {
+		flags = markInSync | dehydrate
+	}
 	res, _, _ := procUpdatePlaceholder.Call(uintptr(handle), uintptr(unsafe.Pointer(&meta)), uintptr(bytesPtr(identity)), uintptr(len(identity)),
-		0, 0, verifyInSync|markInSync|dehydrate, 0, 0)
+		0, 0, flags, 0, 0)
 	runtime.KeepAlive(identity)
 	return check(res)
+}
+
+// SetIdentity replaces the identity of a placeholder and keeps its content; inSync marks it as identical to the cloud.
+func SetIdentity(handle windows.Handle, identity []byte, inSync bool) error {
+	flags := uintptr(0)
+	if inSync {
+		flags = 2
+	}
+	res, _, _ := procUpdatePlaceholder.Call(uintptr(handle), 0, uintptr(bytesPtr(identity)), uintptr(len(identity)), 0, 0, flags, 0, 0)
+	runtime.KeepAlive(identity)
+	return check(res)
+}
+
+// State is what the platform knows about a file or folder of a sync root.
+type State struct {
+	Placeholder bool
+	// InSync is cleared by the platform when the content or the name changes on this computer.
+	InSync   bool
+	Identity []byte
+}
+
+const errNotACloudFile = Error(0x80070178)
+
+// Stat reads the placeholder state of a path without opening its content.
+func Stat(path string) (State, error) {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return State{}, err
+	}
+	handle, err := windows.CreateFile(p, windows.FILE_READ_ATTRIBUTES, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return State{}, err
+	}
+	defer windows.CloseHandle(handle)
+	// CF_PLACEHOLDER_BASIC_INFO: pin state, in-sync state, two file IDs, identity length, identity.
+	const inSyncAt, lengthAt, identityAt = 4, 24, 28
+	buf := make([]byte, identityAt+4096+4)
+	var n uint32
+	res, _, _ := procGetPlaceholderInfo.Call(uintptr(handle), 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(unsafe.Pointer(&n)))
+	if err := check(res); err != nil {
+		if err == errNotACloudFile {
+			return State{}, nil
+		}
+		return State{}, err
+	}
+	state := State{Placeholder: true, InSync: *(*uint32)(unsafe.Pointer(&buf[inSyncAt])) == 1}
+	if length := *(*uint32)(unsafe.Pointer(&buf[lengthAt])); length > 0 && identityAt+int(length) <= len(buf) {
+		state.Identity = append([]byte(nil), buf[identityAt:identityAt+int(length)]...)
+	}
+	return state, nil
 }
 
 // Open returns a handle suited to Update, Dehydrate, SetInSync and ConvertToPlaceholder.

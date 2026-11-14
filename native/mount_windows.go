@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -23,21 +24,34 @@ var providerID = windows.GUID{Data1: 0x6f2a7c11, Data2: 0x3d5e, Data3: 0x4b8a, D
 // reconcileDelay groups remote changes before they are written to the folder.
 var reconcileDelay = 2 * time.Second
 
-// platform is the Cloud Files sync root of one account. Folders are filled when first opened;
-// populated remembers which ones exist on disk so remote changes can be written into them.
+// folderState is a folder of the account whose whole listing is on disk.
+type folderState struct {
+	// Dir is the Drive folder shown there.
+	Dir string
+	// Seen maps each item found there to the name it had: what tells a removal on this computer
+	// from an arrival in the Drive, and a local rename from a remote one.
+	Seen map[string]string
+}
+
+// platform is the Cloud Files sync root of one account. Folders are filled when first opened and
+// compared with the Drive afterwards, in both directions; see sync_windows.go.
 type platform struct {
 	conn   *cfapi.Connection
 	root   string // the account's folder in its long form
 	prefix string // the root as callbacks name it: without the volume
 	ctx    context.Context
 	cancel context.CancelFunc
+	watch  windows.Handle
 
-	mu        sync.Mutex
-	populated map[string]string // folder path relative to the root → Drive folder shown there
-	changed   bool
-	dirty     map[string]bool // Drive folders whose listing changed
-	readers   map[*cfile]*reader
-	fetches   map[int64][]*fetchJob
+	mu         sync.Mutex
+	populated  map[string]*folderState // by folder path relative to the root, in lower case
+	changed    bool
+	dirty      map[string]bool      // Drive folders whose listing changed
+	local      map[string]time.Time // folders that changed on disk, and when to look at them
+	superseded map[string][2]int64  // files whose local content went to the Drive as a conflict copy: size and time
+	gone       map[string]time.Time // entries missing from their folder, and since when
+	readers    map[*cfile]*reader
+	fetches    map[int64][]*fetchJob
 }
 
 type fetchJob struct {
@@ -45,19 +59,25 @@ type fetchJob struct {
 	cancel   context.CancelFunc
 }
 
-// identityOf is what the platform hands back with every request about an entry:
-// its kind, the item whose bytes or children it shows, and the listed item.
+// relKey names a folder in the platform's tables; NTFS does not tell upper from lower case.
+func relKey(rel string) string { return strings.ToLower(strings.Trim(rel, `\`)) }
+
+// identityOf is what the platform hands back with every request about an entry: its kind, the item
+// whose bytes or children it shows, the listed item and the version of the content it stands for.
 func identityOf(e entry) []byte {
-	return []byte(string("dfl"[e.Kind]) + "|" + e.Content.ID + "|" + e.It.ID)
+	return []byte(string("dfl"[e.Kind]) + "|" + e.Content.ID + "|" + e.It.ID + "|" + e.Content.MD5)
 }
 
-func parseIdentity(b []byte) (kind int, content, id string, ok bool) {
-	parts := strings.SplitN(string(b), "|", 3)
-	if len(parts) != 3 || len(parts[0]) != 1 {
-		return 0, "", "", false
+func parseIdentity(b []byte) (kind int, content, id, version string, ok bool) {
+	parts := strings.SplitN(string(b), "|", 4)
+	if len(parts) < 3 || len(parts[0]) != 1 {
+		return 0, "", "", "", false
+	}
+	if len(parts) == 4 {
+		version = parts[3]
 	}
 	kind = strings.Index("dfl", parts[0])
-	return kind, parts[1], parts[2], kind >= 0
+	return kind, parts[1], parts[2], version, kind >= 0
 }
 
 // linkContent is the Internet shortcut that opens a Google editors document in the browser.
@@ -102,7 +122,9 @@ func (m *Mount) attach() error {
 	m.plat.mu.Lock()
 	m.plat.ctx, m.plat.cancel = ctx, cancel
 	m.plat.root, m.plat.prefix = root, strings.TrimPrefix(root, filepath.VolumeName(root))
-	m.plat.populated, m.plat.dirty = map[string]string{}, map[string]bool{}
+	m.plat.populated, m.plat.dirty = map[string]*folderState{}, map[string]bool{}
+	m.plat.local, m.plat.superseded = map[string]time.Time{}, map[string][2]int64{}
+	m.plat.gone = map[string]time.Time{}
 	m.plat.readers, m.plat.fetches = map[*cfile]*reader{}, map[int64][]*fetchJob{}
 	_ = readJSON(m.populatedPath(), &m.plat.populated)
 	m.plat.mu.Unlock()
@@ -115,6 +137,17 @@ func (m *Mount) attach() error {
 	m.plat.mu.Lock()
 	m.plat.conn = conn
 	m.plat.mu.Unlock()
+	if p, err := windows.UTF16PtrFromString(root); err == nil {
+		// Without the watcher, changes made on this computer are still found when the service starts.
+		handle, err := windows.CreateFile(p, windows.FILE_LIST_DIRECTORY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+			nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+		if err == nil {
+			m.plat.watch = handle
+			go m.watcher(ctx, handle)
+		} else {
+			m.problem("Acompanhar pasta", m.a.Email, err)
+		}
+	}
 	go m.reconciler(ctx)
 	return nil
 }
@@ -128,6 +161,11 @@ func (m *Mount) detach() {
 	if cancel != nil {
 		cancel()
 	}
+	if m.plat.watch != 0 {
+		_ = windows.CancelIoEx(m.plat.watch, nil)
+		_ = windows.CloseHandle(m.plat.watch)
+		m.plat.watch = 0
+	}
 	if conn != nil {
 		_ = conn.Close()
 	}
@@ -138,7 +176,7 @@ func (m *Mount) detach() {
 func (m *Mount) forget() {
 	_ = cfapi.Unregister(m.path)
 	os.Remove(m.populatedPath())
-	if onlyPlaceholders(m.path) {
+	if disposable(m.path) {
 		os.RemoveAll(m.path)
 	}
 }
@@ -147,13 +185,13 @@ func (m *Mount) savePopulated() {
 	m.plat.mu.Lock()
 	changed := m.plat.changed
 	m.plat.changed = false
-	copy := make(map[string]string, len(m.plat.populated))
-	for k, v := range m.plat.populated {
-		copy[k] = v
+	var data []byte
+	if changed {
+		data, _ = json.Marshal(m.plat.populated)
 	}
 	m.plat.mu.Unlock()
-	if changed {
-		_ = writeJSON(m.populatedPath(), copy)
+	if data != nil {
+		_ = writePrivate(m.populatedPath(), data)
 	}
 }
 
@@ -191,7 +229,7 @@ func (m *Mount) fetchPlaceholders(r *cfapi.Request, _ string) {
 		defer cancel()
 		dir := vRoot
 		if len(r.Identity) > 0 {
-			kind, content, _, ok := parseIdentity(r.Identity)
+			kind, content, _, _, ok := parseIdentity(r.Identity)
 			if !ok || kind != kindDir {
 				_ = r.FailPlaceholders(cfapi.StatusUnsuccessful)
 				return
@@ -217,10 +255,12 @@ func (m *Mount) fetchPlaceholders(r *cfapi.Request, _ string) {
 			_ = r.FailPlaceholders(statusCloudFileUnsuccessful)
 			return
 		}
-		entries := m.meta.listing(dir)
-		list := make([]cfapi.Placeholder, len(entries))
-		for i, e := range entries {
-			list[i] = placeholderOf(e)
+		var list []cfapi.Placeholder
+		for _, e := range m.meta.listing(dir) {
+			// What is still on its way to the Drive is already here as an ordinary file.
+			if !e.It.Local {
+				list = append(list, placeholderOf(e))
+			}
 		}
 		const batch = 2000
 		for first := 0; ; first += batch {
@@ -241,8 +281,10 @@ func (m *Mount) fetchPlaceholders(r *cfapi.Request, _ string) {
 			return
 		}
 		m.plat.mu.Lock()
-		m.plat.populated[rel], m.plat.changed = dir, true
-		// What changed while the listing was on its way is written by the next reconciliation.
+		if st := m.plat.populated[relKey(rel)]; st == nil || st.Dir != dir {
+			m.plat.populated[relKey(rel)], m.plat.changed = &folderState{Dir: dir, Seen: map[string]string{}}, true
+		}
+		// The next comparison records what arrived and writes what changed while the listing was on its way.
 		m.plat.dirty[dir] = true
 		m.plat.mu.Unlock()
 	}()
@@ -273,7 +315,7 @@ func (m *Mount) fetchData(r *cfapi.Request, offset, length int64) {
 			}
 			m.plat.mu.Unlock()
 		}()
-		kind, content, _, ok := parseIdentity(r.Identity)
+		kind, content, _, _, ok := parseIdentity(r.Identity)
 		it := m.meta.item(content)
 		if !ok || kind == kindDir || it == nil {
 			_ = r.FailData(offset, length, cfapi.StatusUnsuccessful)
@@ -358,131 +400,9 @@ func (m *Mount) remoteChanged(dirs []string, _ string) {
 	}
 }
 
-func (m *Mount) reconciler(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(reconcileDelay):
-		}
-		m.plat.mu.Lock()
-		work := map[string]string{}
-		for rel, dir := range m.plat.populated {
-			if m.plat.dirty[dir] {
-				work[rel] = dir
-			}
-		}
-		m.plat.dirty = map[string]bool{}
-		m.plat.mu.Unlock()
-		for rel, dir := range work {
-			m.reconcile(rel, dir)
-		}
-		m.savePopulated()
-	}
-}
-
 func attributes(info os.FileInfo) uint32 {
 	if data, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
 		return data.FileAttributes
 	}
 	return 0
-}
-
-// onlyPlaceholders reports whether everything under path came from the Drive.
-func onlyPlaceholders(path string) bool {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		info, err := e.Info()
-		if err != nil || attributes(info)&windows.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
-			return false
-		}
-		if e.IsDir() && !onlyPlaceholders(filepath.Join(path, e.Name())) {
-			return false
-		}
-	}
-	return true
-}
-
-// reconcile writes the Drive's current listing of a folder into its populated copy on disk:
-// new entries appear, removed ones go away and changed files give up their old content.
-// Files that are not placeholders were created on this computer and are left alone.
-func (m *Mount) reconcile(rel, dir string) {
-	path := filepath.Join(m.plat.root, rel)
-	// The provider's own process sees the folder as it is on disk, without asking itself to fill it.
-	onDisk, err := os.ReadDir(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			m.plat.mu.Lock()
-			delete(m.plat.populated, rel)
-			m.plat.changed = true
-			m.plat.mu.Unlock()
-		}
-		return
-	}
-	want := map[string]entry{}
-	for _, e := range m.meta.listing(dir) {
-		want[nameKey(e.Name)] = e
-	}
-	for _, d := range onDisk {
-		key := nameKey(d.Name())
-		e, keep := want[key]
-		delete(want, key)
-		info, err := d.Info()
-		if err != nil || attributes(info)&windows.FILE_ATTRIBUTE_REPARSE_POINT == 0 {
-			continue
-		}
-		full := filepath.Join(path, d.Name())
-		switch {
-		case !keep:
-			if !d.IsDir() {
-				err = os.Remove(full)
-			} else if onlyPlaceholders(full) {
-				err = os.RemoveAll(full)
-				m.plat.mu.Lock()
-				sub := filepath.Join(rel, d.Name())
-				for known := range m.plat.populated {
-					if known == sub || strings.HasPrefix(known, sub+`\`) {
-						delete(m.plat.populated, known)
-						m.plat.changed = true
-					}
-				}
-				m.plat.mu.Unlock()
-			}
-			if err != nil {
-				m.problem("Atualizar pasta", d.Name(), err)
-			}
-		case d.IsDir() || e.Kind == kindDir:
-		default:
-			p := placeholderOf(e)
-			if info.Size() == p.Size && (p.Modified.IsZero() || info.ModTime().Unix() == p.Modified.Unix()) {
-				continue
-			}
-			handle, err := cfapi.Open(full)
-			if err == nil {
-				err = cfapi.Update(handle, p.Size, p.Modified, p.Identity)
-				windows.CloseHandle(handle)
-			}
-			if err != nil {
-				m.problem("Atualizar arquivo", d.Name(), err)
-			}
-		}
-	}
-	if len(want) == 0 {
-		return
-	}
-	list := make([]cfapi.Placeholder, 0, len(want))
-	for _, e := range want {
-		list = append(list, placeholderOf(e))
-	}
-	if err := cfapi.CreatePlaceholders(path, list); err != nil {
-		m.problem("Atualizar pasta", filepath.Base(path), err)
-	}
-	for _, p := range list {
-		if p.Err != nil {
-			m.problem("Atualizar pasta", p.Name, p.Err)
-		}
-	}
 }

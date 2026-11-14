@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"gcpdrive/cfapi"
+
 	"golang.org/x/oauth2"
 )
 
@@ -53,13 +55,34 @@ func TestMain(m *testing.M) {
 			os.Stderr.WriteString(err.Error())
 			os.Exit(1)
 		}
+	case "write":
+		check(os.WriteFile(path, []byte(os.Getenv("GCP_DRIVE_TEST_DATA")), 0o644))
+	case "patch":
+		file, err := os.OpenFile(path, os.O_RDWR, 0)
+		check(err)
+		_, err = file.WriteAt([]byte(os.Getenv("GCP_DRIVE_TEST_DATA")), 0)
+		check(err)
+		check(file.Close())
+	case "rename":
+		check(os.Rename(path, os.Getenv("GCP_DRIVE_TEST_DATA")))
+	case "remove":
+		check(os.Remove(path))
+	case "mkdir":
+		check(os.Mkdir(path, 0o755))
 	}
 	os.Exit(0)
 }
 
-func other(op, path string) ([]byte, error) {
+func check(err error) {
+	if err != nil {
+		os.Stderr.WriteString(err.Error())
+		os.Exit(1)
+	}
+}
+
+func other(op, path string, data ...string) ([]byte, error) {
 	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), "GCP_DRIVE_TEST_HELPER="+op, "GCP_DRIVE_TEST_PATH="+path)
+	cmd.Env = append(os.Environ(), "GCP_DRIVE_TEST_HELPER="+op, "GCP_DRIVE_TEST_PATH="+path, "GCP_DRIVE_TEST_DATA="+strings.Join(data, ""))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -74,7 +97,8 @@ type errorString string
 func (e errorString) Error() string { return string(e) }
 
 // TestEngineWindows serves a Cloud Files sync root from the engine against the in-memory Drive.
-// It covers reading only; nothing here involves the Explorer or a Google account.
+// Every access to the folder is made by another process, as a program of the user would.
+// Nothing here involves the Explorer or a Google account.
 func TestEngineWindows(t *testing.T) {
 	fake := &fakeDrive{files: map[string]*apiFile{}, content: map[string][]byte{}, sessions: map[string]*apiFile{}, delay: 20 * time.Millisecond}
 	big := bytes.Repeat([]byte("0123456789abcdef"), 5*chunkSize/16+7)
@@ -85,7 +109,7 @@ func TestEngineWindows(t *testing.T) {
 	fake.files["G1"].WebViewLink = "https://docs.google.com/spreadsheets/d/G1"
 	server := httptest.NewServer(fake)
 	defer server.Close()
-	apiBase, uploadBase, reconcileDelay = server.URL+"/drive", server.URL+"/upload", 200*time.Millisecond
+	apiBase, uploadBase, reconcileDelay, writeBack = server.URL+"/drive", server.URL+"/upload", 200*time.Millisecond, 300*time.Millisecond
 
 	state, err := os.MkdirTemp("", "gcp-drive-engine")
 	if err != nil {
@@ -144,14 +168,28 @@ func TestEngineWindows(t *testing.T) {
 		if t.Failed() {
 			t.Logf("problems recorded by the engine: %q", problems())
 			m.plat.mu.Lock()
-			t.Logf("root %q prefix %q populated %q dirty %v", m.plat.root, m.plat.prefix, m.plat.populated, m.plat.dirty)
-			m.plat.mu.Unlock()
-			entries, err := os.ReadDir(filepath.Join(m.plat.root, nameMy, "Projetos"))
-			for _, e := range entries {
-				info, _ := e.Info()
-				t.Logf("on disk: %q size %d attributes 0x%X", e.Name(), info.Size(), attributes(info))
+			t.Logf("root %q prefix %q dirty %v local %v", m.plat.root, m.plat.prefix, m.plat.dirty, m.plat.local)
+			for rel, st := range m.plat.populated {
+				t.Logf("listed folder %q: %+v", rel, *st)
 			}
-			t.Logf("on disk error: %v; listing in the map: %d entries", err, len(m.meta.listing("D1")))
+			m.plat.mu.Unlock()
+			for _, dir := range []string{nameMy, filepath.Join(nameMy, "Projetos"), filepath.Join(nameMy, "Nova pasta")} {
+				entries, err := os.ReadDir(filepath.Join(m.plat.root, dir))
+				for _, e := range entries {
+					info, _ := e.Info()
+					state, serr := cfapi.Stat(filepath.Join(m.plat.root, dir, e.Name()))
+					t.Logf("on disk in %q: %q size %d attributes 0x%X state %+v identity %q %v", dir, e.Name(), info.Size(), attributes(info), state, state.Identity, serr)
+				}
+				t.Logf("on disk in %q: error %v", dir, err)
+			}
+			for _, e := range m.meta.listing("D1") {
+				t.Logf("in the map: %q %+v", e.Name, *e.It)
+			}
+			m.mu.Lock()
+			for _, p := range m.pend {
+				t.Logf("unsent: %+v", *p)
+			}
+			m.mu.Unlock()
 		}
 	}()
 
@@ -229,6 +267,103 @@ func TestEngineWindows(t *testing.T) {
 	waitFor(t, "remote removal", func() bool { return !strings.Contains(names(projects), "chegou depois.txt") })
 	if got := names(projects); got != "nota.txt|relatório.pdf" {
 		t.Fatalf("folder after remote changes: %q", got)
+	}
+	if failed := problems(); failed != "" {
+		t.Fatalf("problems recorded: %s", failed)
+	}
+
+	// From here on the folder is changed on this computer and the Drive follows.
+	do := func(op, path string, data ...string) {
+		t.Helper()
+		if _, err := other(op, path, data...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	remote := func(name string) (*apiFile, []byte) {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		for id, f := range fake.files {
+			if f.Name == name && !f.Trashed {
+				copy := *f
+				return &copy, fake.content[id]
+			}
+		}
+		return nil, nil
+	}
+	synced := func(path string) bool {
+		state, err := cfapi.Stat(path)
+		return err == nil && state.Placeholder && state.InSync
+	}
+
+	// A new file reaches the Drive and becomes an entry in sync, with its content still here.
+	created := filepath.Join(projects, "novo.txt")
+	do("write", created, "conteúdo novo")
+	waitFor(t, "upload", func() bool { _, data := remote("novo.txt"); return string(data) == "conteúdo novo" })
+	waitFor(t, "new file in sync", func() bool { return synced(created) })
+	if data := read("read", created); string(data) != "conteúdo novo" {
+		t.Fatalf("new file read-back: %q", data)
+	}
+
+	// Saving through a temporary file and rename keeps the item and adds a revision.
+	do("write", note+".novo", "terceira versão")
+	do("rename", note+".novo", note)
+	waitFor(t, "revision", func() bool {
+		f, data := remote("nota.txt")
+		return f != nil && f.ID == "F2" && string(data) == "terceira versão"
+	})
+	if f, _ := remote("nota.txt.novo"); f != nil {
+		t.Fatal("temporary file reached the Drive")
+	}
+	waitFor(t, "saved file in sync", func() bool { return synced(note) })
+
+	// Editing in place uploads a revision of the same item.
+	do("patch", note, "QUARTA")
+	waitFor(t, "in-place edit", func() bool {
+		f, data := remote("nota.txt")
+		return f != nil && f.ID == "F2" && strings.HasPrefix(string(data), "QUARTA")
+	})
+	waitFor(t, "edited file in sync", func() bool { return synced(note) })
+
+	// Editor lock files stay on this computer.
+	lock := filepath.Join(projects, ".~lock.nota.txt#")
+	do("write", lock, "x")
+	time.Sleep(1500 * time.Millisecond)
+	if f, _ := remote(".~lock.nota.txt#"); f != nil {
+		t.Fatal("lock file was uploaded")
+	}
+	do("remove", lock)
+
+	// Folders, moves and removal (to the trash).
+	folder := filepath.Join(root, "Nova pasta")
+	do("mkdir", folder)
+	waitFor(t, "folder in the Drive", func() bool { f, _ := remote("Nova pasta"); return f != nil && f.MimeType == mimeFolder })
+	waitFor(t, "folder in sync", func() bool { return synced(folder) })
+	made, _ := remote("Nova pasta")
+	do("rename", created, filepath.Join(folder, "movido.txt"))
+	waitFor(t, "move", func() bool {
+		f, _ := remote("movido.txt")
+		return f != nil && len(f.Parents) == 1 && f.Parents[0] == made.ID
+	})
+	if f, _ := remote("novo.txt"); f != nil {
+		t.Fatal("the moved file kept a copy under the old name")
+	}
+	do("remove", filepath.Join(folder, "movido.txt"))
+	waitFor(t, "removal", func() bool { f, _ := remote("movido.txt"); return f == nil })
+	do("remove", folder)
+	waitFor(t, "folder removal", func() bool { f, _ := remote("Nova pasta"); return f == nil })
+
+	// A rename made in the Drive is not taken for one made here.
+	feed("F1", func(f *apiFile) { f.Name = "relatório final.pdf" })
+	waitFor(t, "remote rename", func() bool { return strings.Contains(names(projects), "relatório final.pdf") })
+	time.Sleep(time.Second)
+	if got := names(projects); got != "nota.txt|relatório final.pdf" {
+		t.Fatalf("folder after local changes: %q", got)
+	}
+	if f, _ := remote("relatório final.pdf"); f == nil || f.ID != "F1" {
+		t.Fatal("the remote rename was undone")
+	}
+	if n, failed := m.unsent(); n != 0 || failed != "" {
+		t.Fatalf("unsent after test: %d %s", n, failed)
 	}
 	if failed := problems(); failed != "" {
 		t.Fatalf("problems recorded: %s", failed)

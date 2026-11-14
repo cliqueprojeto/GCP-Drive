@@ -409,16 +409,10 @@ func (n *node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	if _, ok := n.m.meta.find(n.cid(), name); ok {
 		return nil, syscall.EEXIST
 	}
-	f, err := n.m.drive.create(ctx, map[string]any{"name": name, "mimeType": mimeFolder, "parents": []string{n.cid()}})
-	if err != nil {
-		n.m.problem("Criar pasta", name, err)
-		return nil, errno(err)
+	it, eno := n.m.makeDir(ctx, n.cid(), name)
+	if eno != 0 {
+		return nil, eno
 	}
-	n.m.meta.apply(f)
-	n.m.meta.mu.Lock()
-	n.m.meta.Loaded[f.ID] = true
-	n.m.meta.mu.Unlock()
-	it := n.m.meta.item(f.ID)
 	child := n.child(ctx, entry{Name: name, It: it, Content: it, Kind: kindDir})
 	child.Operations().(*node).fill(&out.Attr)
 	return child, 0
