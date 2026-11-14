@@ -27,6 +27,7 @@ var (
 	procGetPlaceholderInfo     = cldapi.NewProc("CfGetPlaceholderInfo")
 	procHydratePlaceholder     = cldapi.NewProc("CfHydratePlaceholder")
 	procSetPinState            = cldapi.NewProc("CfSetPinState")
+	procRevertPlaceholder      = cldapi.NewProc("CfRevertPlaceholder")
 )
 
 // Error is a failed HRESULT.
@@ -520,6 +521,12 @@ func SetPin(handle windows.Handle, keep bool) error {
 		state = 1
 	}
 	res, _, _ := procSetPinState.Call(uintptr(handle), state, 0, 0)
+	return check(res)
+}
+
+// Revert turns a placeholder whose content is on disk back into an ordinary file or folder.
+func Revert(handle windows.Handle) error {
+	res, _, _ := procRevertPlaceholder.Call(uintptr(handle), 0, 0)
 	return check(res)
 }
 

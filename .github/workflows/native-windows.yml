@@ -25,3 +25,24 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 -v ./...
       # A temporary sync root served from memory. It does not establish behaviour in the Explorer or with a Google account.
+      - name: Build the service and its installer
+        run: |
+          if (Get-Command windres -ErrorAction SilentlyContinue) { windres -O coff -o rsrc_windows_amd64.syso windows/app.rc }
+          $env:CGO_ENABLED = "0"
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o windows/build/gcp-drive.exe .
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $version = (Select-String -Path account.go -Pattern 'const version = "(.*)"').Matches[0].Groups[1].Value
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress }
+          & $nsis /INPUTCHARSET UTF8 "/DVERSION=$version" windows\installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-FileHash windows\build\GCP-Drive-*-instalador.exe -Algorithm SHA256 | Format-List
+      # Silent install, upgrade and uninstall on the runner, without accounts. The installer carries no Google registration.
+      - name: Install, upgrade and uninstall
+        run: windows\test-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gcp-drive-windows-installer
+          path: native/windows/build/GCP-Drive-*-instalador.exe
+          retention-days: 14
+          if-no-files-found: error

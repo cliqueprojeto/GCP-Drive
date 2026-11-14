@@ -79,6 +79,9 @@ func (d *Daemon) showPanel() error {
 	return errors.New("Abra o painel pelo menu de aplicativos.")
 }
 
+// localCommand runs commands that do not go through the service; packages handle setup here.
+func localCommand([]string) (bool, error) { return false, nil }
+
 // diskFree reports the bytes available to the user on the disk that holds path.
 func diskFree(path string) (int64, bool) {
 	var st syscall.Statfs_t

@@ -197,15 +197,61 @@ func (m *Mount) detach() {
 	m.savePopulated()
 }
 
-// forget removes the folder of a disconnected account, unless it holds files that never reached the Drive.
+// forget takes the account's folder out of the Explorer. Copies of what the Drive has are removed;
+// files that never reached the Drive, or changed since, stay as ordinary files in the folder.
 func (m *Mount) forget() {
+	root := longPath(m.path)
+	// Connected as the provider, this process sees the folder as it is on disk, without being asked to fill it.
+	conn, _ := cfapi.Connect(root, cfapi.Callbacks{})
+	empty := m.prune(root)
+	if conn != nil {
+		_ = conn.Close()
+	}
 	if cfapi.UnregisterShell(m.shellID()) != nil {
-		_ = cfapi.Unregister(m.path)
+		_ = cfapi.Unregister(root)
 	}
 	os.Remove(m.populatedPath())
-	if disposable(m.path) {
-		os.RemoveAll(m.path)
+	if empty {
+		os.Remove(root)
 	}
+}
+
+// prune empties a folder of what is only a copy of the Drive and reports whether nothing is left.
+func (m *Mount) prune(path string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	empty := true
+	for _, e := range entries {
+		full := filepath.Join(path, e.Name())
+		info, err := e.Info()
+		state, serr := cfapi.Stat(full)
+		if err != nil || serr != nil {
+			empty = false
+			continue
+		}
+		if e.IsDir() {
+			if m.prune(full) && os.Remove(full) == nil {
+				continue
+			}
+		} else if state.Placeholder {
+			// Without content there is nothing to lose; with content, it must be the version the Drive has.
+			copyOfDrive := attributes(info)&attributeRecallOnDataAccess != 0
+			if _, content, _, version, ok := parseIdentity(state.Identity); ok && !copyOfDrive && state.InSync {
+				it := m.meta.item(content)
+				copyOfDrive = it != nil && !it.Local && version == it.MD5 && sameContent(info, it)
+			}
+			if copyOfDrive && os.Remove(full) == nil {
+				continue
+			}
+		}
+		empty = false
+		if state.Placeholder {
+			_ = withHandle(full, cfapi.Revert)
+		}
+	}
+	return empty
 }
 
 func (m *Mount) savePopulated() {

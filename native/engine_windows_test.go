@@ -454,4 +454,31 @@ func TestEngineWindows(t *testing.T) {
 	if failed := problems(); failed != "" {
 		t.Fatalf("problems recorded: %s", failed)
 	}
+	// Taking the account off this computer, as disconnecting and uninstalling do, removes the copies of
+	// the Drive and leaves what exists only here as ordinary files, out of the Explorer's registration.
+	own := filepath.Join(projects, "~$rascunho.docx")
+	do("write", own, "só neste computador")
+	m.stop()
+	m.forget()
+	var left []string
+	filepath.WalkDir(m.path, func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(m.path, path)
+			left = append(left, rel)
+		}
+		return nil
+	})
+	if want := filepath.Join(nameMy, "Projetos", "~$rascunho.docx"); len(left) != 1 || left[0] != want {
+		t.Fatalf("left in the folder: %q", left)
+	}
+	if data, err := os.ReadFile(filepath.Join(m.path, left[0])); err != nil || string(data) != "só neste computador" {
+		t.Fatalf("file kept on this computer: %q %v", data, err)
+	}
+	if state, err := cfapi.Stat(filepath.Join(m.path, nameMy)); err != nil || state.Placeholder {
+		t.Fatalf("folder kept on this computer is still a placeholder: %+v %v", state, err)
+	}
+	if key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\`+m.shellID(), registry.QUERY_VALUE); err == nil {
+		key.Close()
+		t.Fatal("the folder is still registered with the Explorer")
+	}
 }

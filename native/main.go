@@ -461,10 +461,12 @@ func (d *Daemon) serve(listener net.Listener) {
 	}
 }
 
+// lockPath is the file whose lock keeps one service per session.
+func lockPath() string { return filepath.Join(filepath.Dir(socketPath()), "gcp-drive.lock") }
+
 func runDaemon() error {
-	lockPath := filepath.Join(filepath.Dir(socketPath()), "gcp-drive.lock")
-	_ = os.MkdirAll(filepath.Dir(lockPath), 0o700)
-	unlock, held, err := lockFile(lockPath)
+	_ = os.MkdirAll(filepath.Dir(lockPath()), 0o700)
+	unlock, held, err := lockFile(lockPath())
 	if err != nil {
 		return err
 	}
@@ -568,7 +570,11 @@ func main() {
 		if strings.HasPrefix(args[0], "gcp-drive:") {
 			return
 		}
-		out, err = call(args)
+		if handled, failed := localCommand(args); handled {
+			err = failed
+		} else {
+			out, err = call(args)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
