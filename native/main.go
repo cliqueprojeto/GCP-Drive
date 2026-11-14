@@ -424,7 +424,7 @@ func (d *Daemon) handle(ctx context.Context, args []string) (any, error) {
 		os.Remove(m.meta.path)
 		os.Remove(m.pinsPath())
 		os.RemoveAll(m.cache.root)
-		os.Remove(m.path)
+		m.forget()
 		return nil, nil
 	}
 	return nil, errors.New("Comando desconhecido.")

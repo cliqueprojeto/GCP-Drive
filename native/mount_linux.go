@@ -77,3 +77,6 @@ func (m *Mount) detach() {
 		}
 	}
 }
+
+// forget removes the folder of a disconnected account.
+func (m *Mount) forget() { os.Remove(m.path) }

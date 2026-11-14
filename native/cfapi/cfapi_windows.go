@@ -23,6 +23,7 @@ var (
 	procConvertToPlaceholder   = cldapi.NewProc("CfConvertToPlaceholder")
 	procDehydratePlaceholder   = cldapi.NewProc("CfDehydratePlaceholder")
 	procSetInSyncState         = cldapi.NewProc("CfSetInSyncState")
+	procUpdatePlaceholder      = cldapi.NewProc("CfUpdatePlaceholder")
 )
 
 // Error is a failed HRESULT.
@@ -260,6 +261,9 @@ type Request struct {
 	FileSize int64
 }
 
+// Transfer identifies the open file a request belongs to; a cancellation carries the same value.
+func (r *Request) Transfer() int64 { return r.transfer }
+
 // Callbacks receive the platform's requests. They run on a system thread and must return quickly.
 type Callbacks struct {
 	FetchData         func(r *Request, offset, length int64)
@@ -438,10 +442,18 @@ func collect(list []Placeholder, infos []placeholderCreateInfo) {
 	}
 }
 
-// TransferPlaceholders answers FetchPlaceholders with the entries of the folder. done marks the folder as complete.
-func (r *Request) TransferPlaceholders(list []Placeholder, done bool) error {
+// FailPlaceholders tells the platform the folder cannot be listed now.
+func (r *Request) FailPlaceholders(status int32) error {
+	p := opParamsTransferPlaceholders{Status: status}
+	p.ParamSize = uint32(unsafe.Sizeof(p))
+	return r.execute(opTransferPlaceholders, unsafe.Pointer(&p))
+}
+
+// TransferPlaceholders answers FetchPlaceholders with entries of the folder, in one or more calls.
+// total is the size of the whole listing; done marks the folder as complete.
+func (r *Request) TransferPlaceholders(list []Placeholder, total int, done bool) error {
 	infos, names := buildPlaceholders(list)
-	p := opParamsTransferPlaceholders{Total: int64(len(list)), Count: uint32(len(list))}
+	p := opParamsTransferPlaceholders{Total: int64(total), Count: uint32(len(list))}
 	if len(infos) > 0 {
 		p.Array = unsafe.Pointer(&infos[0])
 	}
@@ -517,3 +529,36 @@ var (
 	_ [88]byte  = [unsafe.Sizeof(placeholderCreateInfo{})]byte{}
 	_ [56]byte  = [unsafe.Offsetof(placeholderCreateInfo{}.FileIdentity)]byte{}
 )
+
+type fsMetadata struct {
+	CreationTime   int64
+	LastAccessTime int64
+	LastWriteTime  int64
+	ChangeTime     int64
+	FileAttributes uint32
+	FileSize       int64
+}
+
+var _ [48]byte = [unsafe.Sizeof(fsMetadata{})]byte{}
+
+// Update gives an in-sync file placeholder a new size, time and identity and releases its old content.
+// It fails when the placeholder has local changes.
+func Update(handle windows.Handle, size int64, modified time.Time, identity []byte) error {
+	t := filetime(modified)
+	meta := fsMetadata{CreationTime: t, LastAccessTime: t, LastWriteTime: t, ChangeTime: t, FileAttributes: fileAttributeNormal, FileSize: size}
+	const verifyInSync, markInSync, dehydrate = 1, 2, 4
+	res, _, _ := procUpdatePlaceholder.Call(uintptr(handle), uintptr(unsafe.Pointer(&meta)), uintptr(bytesPtr(identity)), uintptr(len(identity)),
+		0, 0, verifyInSync|markInSync|dehydrate, 0, 0)
+	runtime.KeepAlive(identity)
+	return check(res)
+}
+
+// Open returns a handle suited to Update, Dehydrate, SetInSync and ConvertToPlaceholder.
+func Open(path string) (windows.Handle, error) {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+	return windows.CreateFile(p, windows.FILE_READ_ATTRIBUTES|windows.FILE_WRITE_DATA, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+}

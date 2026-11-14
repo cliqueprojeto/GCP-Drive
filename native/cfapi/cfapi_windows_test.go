@@ -128,7 +128,7 @@ func TestSyncRoot(t *testing.T) {
 			mu.Unlock()
 			go func() {
 				list := append([]Placeholder(nil), tree[string(r.Identity)]...)
-				fail("TransferPlaceholders", r.TransferPlaceholders(list, true))
+				fail("TransferPlaceholders", r.TransferPlaceholders(list, len(list), true))
 				for _, p := range list {
 					fail("placeholder "+p.Name, p.Err)
 				}

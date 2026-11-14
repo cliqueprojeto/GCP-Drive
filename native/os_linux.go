@@ -44,6 +44,9 @@ var invalidName = strings.NewReplacer("/", "∕", "\x00", "")
 
 func localName(name string) string { return invalidName.Replace(name) }
 
+// nameKey is what makes two names the same entry of a folder.
+func nameKey(name string) string { return name }
+
 // openExternal opens an address or a folder in the user's default program.
 func openExternal(target string) error { return exec.Command("xdg-open", target).Start() }
 

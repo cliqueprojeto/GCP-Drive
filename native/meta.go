@@ -349,9 +349,9 @@ func (m *Meta) listing(dir string) []entry {
 		for _, d := range m.Drives {
 			it := &Item{ID: d.ID, Name: d.Name, Mime: mimeFolder, DriveID: d.ID, CanEdit: true}
 			name := visibleName(it, kindDir)
-			used[name]++
-			if used[name] > 1 {
-				name = fmt.Sprintf("%s (%d)", name, used[name])
+			used[nameKey(name)]++
+			if n := used[nameKey(name)]; n > 1 {
+				name = fmt.Sprintf("%s (%d)", name, n)
 			}
 			out = append(out, entry{Name: name, It: it, Content: it, Kind: kindDir})
 		}
@@ -369,8 +369,8 @@ func (m *Meta) listing(dir string) []entry {
 		for _, it := range items {
 			kind, content := m.resolve(it)
 			name := visibleName(it, kind)
-			used[name]++
-			if n := used[name]; n > 1 {
+			used[nameKey(name)]++
+			if n := used[nameKey(name)]; n > 1 {
 				ext := filepath.Ext(name)
 				name = fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(name, ext), n, ext)
 			}

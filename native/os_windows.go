@@ -65,6 +65,9 @@ func localName(name string) string {
 	return name
 }
 
+// nameKey is what makes two names the same entry of a folder: NTFS ignores case.
+func nameKey(name string) string { return strings.ToLower(name) }
+
 // openExternal opens an address or a folder in the user's default program.
 func openExternal(target string) error {
 	verb, _ := windows.UTF16PtrFromString("open")
