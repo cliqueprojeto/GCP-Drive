@@ -157,7 +157,12 @@ func TestSyncRoot(t *testing.T) {
 						return
 					}
 					off += n
-					fail("Progress", r.Progress(end-offset, off-offset))
+					// The last block completes the request, and a completed request takes no progress.
+					if off < end {
+						if err := r.Progress(end-offset, off-offset); err != nil && err != ErrCanceled {
+							fail("Progress", err)
+						}
+					}
 				}
 			}()
 		},
