@@ -1,0 +1,27 @@
+name: Native engine (Windows)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    name: Cloud Files integration
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Cloud Files filter driver
+        run: |
+          cmd /c ver
+          sc.exe query cldflt
+          exit 0
+      - run: go vet ./...
+      - run: go test -count=1 -v ./...
+      # A temporary sync root served from memory. It does not establish behaviour in the Explorer or with a Google account.
