@@ -205,3 +205,11 @@ A execução anterior, 43599759255, falhou no teste do motor antes de chegar ao 
 No Linux, `go vet ./...` sem avisos e `go test -race -count=2 ./...` aprovado depois dessas mudanças.
 
 Não executado: o instalador com janelas (páginas, pergunta sobre remover contas, "Abrir o GCP-Drive" ao final); o aviso do SmartScreen para instalador sem assinatura digital; a desinstalação com contas conectadas pelo desinstalador (a retirada da conta foi testada pelo motor, não pelo instalador); início real no login do Windows; atualização com arquivos na fila de envio; Windows 10; instalação por um usuário sem direitos de administrador (o runner é administrador). O ícone do executável depende de `windres` no runner e não foi conferido.
+
+## Cadastro no Google pelo painel e guia ilustrado (14 de novembro de 2026)
+
+Executado no GitHub Actions, runner `windows-latest`, workflow `Native engine (Windows)`, execução 43601124193 (testes do motor e do instalador aprovados de novo; instalador `GCP-Drive-0.5.0-instalador.exe`, SHA-256 `3D24EDD0205394D0A7017011367196871082130AA6ECAC7B023A2323010DB66D`; o envio como artefato foi recusado outra vez pela cota da conta). No teste do painel: sem cadastro o servidor respondeu "ausente"; um arquivo de cliente do tipo errado foi recusado com a explicação; um arquivo de cliente "App para computador" de teste foi guardado junto das contas e passou a ser o cadastro usado; um endereço fora do console do Google foi recusado pelo botão de abrir páginas.
+
+Executado no BigLinux: a página do guia (`native/panel/guia.html`) e o quadro "Cadastro no Google" do painel foram abertos num navegador com dados de exemplo, em tema escuro; conferidas as figuras dos passos 1 a 3 e a disposição do quadro.
+
+Não executado: escolher um arquivo pelo botão do painel numa janela real; os botões do guia que abrem as páginas do Google; o percurso de criar o cadastro numa Conta do Google (os nomes das telas vieram da documentação pública do Google de 14 de novembro de 2026, não de uma conta); o login com um cadastro criado por esse guia e o aviso "O Google não verificou este app"; as figuras 4 a 7 e o tema claro.
