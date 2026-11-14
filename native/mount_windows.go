@@ -89,13 +89,7 @@ func (m *Mount) attach() error {
 	if err := os.MkdirAll(m.path, 0o700); err != nil {
 		return err
 	}
-	root := m.path
-	if p, err := windows.UTF16PtrFromString(root); err == nil {
-		buf := make([]uint16, 1024)
-		if n, err := windows.GetLongPathName(p, &buf[0], uint32(len(buf))); err == nil && n > 0 && int(n) < len(buf) {
-			root = windows.UTF16ToString(buf[:n])
-		}
-	}
+	root := longPath(m.path)
 	reg := cfapi.Root{Path: root, Provider: "GCP-Drive", Version: version, Identity: []byte(m.a.ID), ProviderID: providerID,
 		Hydration: cfapi.HydrationPartial, Population: cfapi.PopulationPartial}
 	if err := cfapi.Register(reg); err != nil {
@@ -163,11 +157,27 @@ func (m *Mount) savePopulated() {
 	}
 }
 
+// longPath replaces 8.3 short names (RUNNER~1) in an existing path by the real ones.
+func longPath(path string) string {
+	if p, err := windows.UTF16PtrFromString(path); err == nil {
+		buf := make([]uint16, 4096)
+		if n, err := windows.GetLongPathName(p, &buf[0], uint32(len(buf))); err == nil && n > 0 && int(n) < len(buf) {
+			return windows.UTF16ToString(buf[:n])
+		}
+	}
+	return path
+}
+
 // relative turns the path of a callback into one relative to the account's folder.
+// The platform repeats the path as the program that opened it wrote it, short names included.
 func (m *Mount) relative(path string) (string, bool) {
 	prefix := m.plat.prefix
 	if len(path) < len(prefix) || !strings.EqualFold(path[:len(prefix)], prefix) {
-		return "", false
+		volume := filepath.VolumeName(m.plat.root)
+		path = strings.TrimPrefix(longPath(volume+path), volume)
+		if len(path) < len(prefix) || !strings.EqualFold(path[:len(prefix)], prefix) {
+			return "", false
+		}
 	}
 	return strings.Trim(path[len(prefix):], `\`), true
 }
