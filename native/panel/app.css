@@ -61,3 +61,8 @@ form#settings .actions { grid-column: 1 / -1; }
 dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--text); padding: 22px; max-width: 460px; }
 dialog::backdrop { background: rgba(10, 8, 20, 0.5); }
 dialog .actions { justify-content: flex-end; margin-top: 18px; }
+a.button { display: inline-block; text-decoration: none; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; }
+a.button:hover { border-color: var(--accent); }
+.guide main { max-width: 760px; }
+.step img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); margin-top: 6px; }
+.step p { margin: 8px 0; }

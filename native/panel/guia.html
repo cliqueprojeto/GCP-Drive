@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadastro no Google — GCP-Drive</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="guide">
+<header><div class="brand"><h1>Cadastro no Google</h1><span class="muted">uma vez só, cerca de 10 minutos, gratuito</span></div>
+<div class="actions"><a class="button" href="./">Voltar ao painel</a></div></header>
+<main>
+<section class="card">
+  <p>Para entrar na sua conta, o Google exige que todo aplicativo tenha um cadastro. O GCP-Drive não traz um cadastro pronto: você cria o seu, na sua própria Conta do Google, e ele fica só com você. O GCP-Drive não envia esse arquivo nem os seus dados para lugar nenhum além do Google.</p>
+  <p class="muted">As figuras são desenhos simplificados das telas do Google; as cores e a posição dos botões podem variar um pouco.</p>
+</section>
+<section class="card step">
+  <h2>1. Crie um projeto</h2>
+  <p>Abra o console do Google Cloud e entre com a sua Conta do Google. No alto da página, clique em <b>Selecionar projeto</b>, depois em <b>Novo projeto</b>. Dê o nome <b>GCP-Drive</b> e clique em <b>Criar</b>. Espere alguns segundos e escolha o projeto criado.</p>
+  <p><button data-open="https://console.cloud.google.com/projectcreate">Abrir a criação de projeto</button></p>
+  <img src="guia/1-projeto.svg" alt="Tela de novo projeto: botão Selecionar projeto, botão Novo projeto, nome GCP-Drive e botão Criar.">
+</section>
+<section class="card step">
+  <h2>2. Ative o Google Drive nesse projeto</h2>
+  <p>Na página da <b>Google Drive API</b>, confira se o projeto <b>GCP-Drive</b> aparece no alto e clique em <b>Ativar</b>.</p>
+  <p><button data-open="https://console.cloud.google.com/apis/library/drive.googleapis.com">Abrir a Google Drive API</button></p>
+  <img src="guia/2-drive-api.svg" alt="Biblioteca de APIs com a Google Drive API e o botão Ativar.">
+</section>
+<section class="card step">
+  <h2>3. Preencha os dados do aplicativo</h2>
+  <p>Na <b>Plataforma de autenticação do Google</b>, clique em <b>Começar</b>. Em <b>Nome do app</b> escreva <b>GCP-Drive</b>, escolha o seu e-mail como suporte, em <b>Público-alvo</b> marque <b>Externo</b>, informe o seu e-mail de contato, aceite a política e clique em <b>Criar</b>.</p>
+  <p><button data-open="https://console.cloud.google.com/auth/overview">Abrir a Plataforma de autenticação</button></p>
+  <img src="guia/3-autenticacao.svg" alt="Formulário com nome do app GCP-Drive, e-mail de suporte, público-alvo Externo e botão Criar.">
+</section>
+<section class="card step">
+  <h2>4. Publique o aplicativo</h2>
+  <p>No menu <b>Público-alvo</b>, clique em <b>Publicar app</b> e confirme. Sem este passo o Google desconecta a conta a cada 7 dias. Não é preciso pedir a verificação ao Google.</p>
+  <p><button data-open="https://console.cloud.google.com/auth/audience">Abrir Público-alvo</button></p>
+  <img src="guia/4-publicar.svg" alt="Página Público-alvo com o status Teste, o botão Publicar app e a confirmação.">
+</section>
+<section class="card step">
+  <h2>5. Crie o cliente e baixe o arquivo</h2>
+  <p>No menu <b>Clientes</b>, clique em <b>Criar cliente</b>. Em <b>Tipo de aplicativo</b> escolha <b>App para computador</b>, dê um nome qualquer e clique em <b>Criar</b>. Na janela que aparece, clique em <b>Fazer o download do JSON</b>. O arquivo vai para a sua pasta Downloads, com um nome que começa com <b>client_secret</b>.</p>
+  <p><button data-open="https://console.cloud.google.com/auth/clients">Abrir Clientes</button></p>
+  <img src="guia/5-cliente.svg" alt="Página Clientes: Criar cliente, tipo App para computador, botão Criar e botão Fazer o download do JSON.">
+</section>
+<section class="card step">
+  <h2>6. Entregue o arquivo ao GCP-Drive</h2>
+  <p>Volte ao painel do GCP-Drive. No quadro <b>Cadastro no Google</b>, clique em <b>Escolher arquivo</b> e selecione o arquivo baixado. Depois clique em <b>Adicionar conta</b>.</p>
+  <p><a class="button" href="./">Voltar ao painel</a></p>
+  <img src="guia/6-painel.svg" alt="Painel do GCP-Drive com o quadro Cadastro no Google, o botão Escolher arquivo e o botão Adicionar conta.">
+</section>
+<section class="card step">
+  <h2>7. No primeiro login, passe pelo aviso do Google</h2>
+  <p>Ao adicionar uma conta, o Google mostra <b>“O Google não verificou este app”</b>. É esperado: o cadastro é seu e não passou pela verificação do Google, que é um processo pago voltado a empresas. Clique em <b>Avançado</b> e em <b>Acessar GCP-Drive (não seguro)</b>, depois permita o acesso ao Drive.</p>
+  <img src="guia/7-aviso.svg" alt="Aviso O Google não verificou este app, com os links Avançado e Acessar GCP-Drive (não seguro).">
+  <p class="muted">Cada cadastro não verificado aceita até 100 Contas do Google. Guarde o arquivo baixado: ele identifica o seu cadastro e não deve ser publicado.</p>
+</section>
+</main>
+<script src="guia.js"></script>
+</body>
+</html>

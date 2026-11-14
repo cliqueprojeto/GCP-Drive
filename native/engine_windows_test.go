@@ -436,6 +436,33 @@ func TestEngineWindows(t *testing.T) {
 	if code, body := ask(token); code != 200 || !strings.Contains(body, "teste@example.com") || !strings.Contains(body, `"Err":""`) {
 		t.Fatalf("panel status: %d %s", code, body)
 	}
+	post := func(path, body string) string {
+		req, _ := http.NewRequest("POST", base+path, strings.NewReader(body))
+		req.Header.Set("X-GCP-Drive-Token", token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		out, _ := io.ReadAll(res.Body)
+		return strings.TrimSpace(string(out))
+	}
+	// The registration with Google is absent until the user hands its file over, and a wrong file is refused.
+	if got := post("/api/registration", `{}`); got != `{"Out":false,"Err":""}` {
+		t.Fatalf("registration before: %s", got)
+	}
+	if got := post("/api/registration", `{"ID":"{\"web\":{\"client_id\":\"x\"}}"}`); !strings.Contains(got, "App para computador") {
+		t.Fatalf("wrong registration file: %s", got)
+	}
+	if got := post("/api/registration", `{"ID":"{\"installed\":{\"client_id\":\"teste\",\"client_secret\":\"teste\"}}"}`); got != `{"Out":true,"Err":""}` {
+		t.Fatalf("registration after: %s", got)
+	}
+	if id, _, err := loadDesktopOAuth(); err != nil || id != "teste" {
+		t.Fatalf("stored registration: %q %v", id, err)
+	}
+	if got := post("/api/browse", `{"ID":"https://example.com/"}`); !strings.Contains(got, "não permitido") {
+		t.Fatalf("panel opened an address outside Google's console: %s", got)
+	}
 	if code, _ := ask("outro"); code != 403 {
 		t.Fatalf("panel answered without its token: %d", code)
 	}

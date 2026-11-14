@@ -168,9 +168,12 @@ type installedClient struct {
 	} `json:"installed"`
 }
 
+// ownOAuthPath is where a registration supplied by the user is kept, next to the sign-ins.
+func ownOAuthPath() string { return filepath.Join(configDir(), "google-oauth.json") }
+
 func loadDesktopOAuth() (id, secret string, err error) {
 	exe, _ := os.Executable()
-	candidates := append([]string{os.Getenv("GCP_DRIVE_OAUTH")}, installedOAuthPaths...)
+	candidates := append([]string{os.Getenv("GCP_DRIVE_OAUTH"), ownOAuthPath()}, installedOAuthPaths...)
 	for _, path := range append(candidates, filepath.Join(filepath.Dir(exe), "google-oauth.json")) {
 		if path == "" {
 			continue

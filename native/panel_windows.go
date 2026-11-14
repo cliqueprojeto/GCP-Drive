@@ -78,6 +78,27 @@ func (d *Daemon) panelHandler(host, token string) http.Handler {
 				path = m.path
 			}
 			err = openExternal(path)
+		case "/api/registration":
+			// With content, stores the application's registration with Google; always answers whether there is one.
+			if in.ID != "" {
+				var client installedClient
+				if json.Unmarshal([]byte(in.ID), &client) != nil || client.Installed.ClientID == "" || client.Installed.ClientSecret == "" {
+					err = errors.New("Este não é o arquivo de um cliente do tipo “App para computador”. Baixe o arquivo JSON na página Clientes da Plataforma de autenticação do Google.")
+					break
+				}
+				if err = writePrivate(ownOAuthPath(), []byte(in.ID)); err != nil {
+					break
+				}
+			}
+			_, _, missing := loadDesktopOAuth()
+			out = missing == nil
+		case "/api/browse":
+			// Only Google's console, which the guide points to.
+			if !strings.HasPrefix(in.ID, "https://console.cloud.google.com/") {
+				err = errors.New("Endereço não permitido.")
+				break
+			}
+			err = openExternal(in.ID)
 		default:
 			http.NotFound(w, r)
 			return

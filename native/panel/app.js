@@ -159,12 +159,44 @@ $('settings').addEventListener('submit', (event) => {
 
 $('add').addEventListener('click', () => {
   const button = $('add');
+  if (!registered) {
+    notice('Falta o cadastro no Google. Veja o quadro “Cadastro no Google” abaixo.');
+    $('registration').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
   button.disabled = true;
   notice('Conclua a autorização na janela do navegador que acabou de abrir.');
   api('/api/login').then(() => notice(''), (err) => notice(err.message)).finally(() => { button.disabled = false; refresh(); refreshExtras(); });
 });
 $('open-root').addEventListener('click', () => act(() => api('/api/open', {})));
 
+// The application's registration with Google: without it nobody can sign in.
+let registered = true;
+async function loadRegistration() {
+  try { registered = await api('/api/registration', {}); } catch { return; }
+  $('registration').hidden = false;
+  $('registration-text').textContent = registered
+    ? 'Configurado neste computador. Para usar outro cadastro, escolha o novo arquivo.'
+    : 'Antes de adicionar uma conta, o GCP-Drive precisa do seu cadastro no Google: um arquivo que você cria gratuitamente na sua própria conta, uma vez só. O passo a passo ilustrado mostra onde clicar.';
+  $('choose').className = registered ? '' : 'primary';
+  $('choose').textContent = registered ? 'Trocar arquivo' : 'Escolher arquivo';
+}
+sessionStorage.setItem('token', token);
+$('guide').href = 'guia.html#' + token;
+$('choose').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', () => {
+  const file = $('file').files[0];
+  $('file').value = '';
+  if (!file) return;
+  act(async () => {
+    if (file.size > 100000) throw new Error('Este não parece ser o arquivo baixado do Google.');
+    await api('/api/registration', { ID: await file.text() });
+    await loadRegistration();
+    notice('Cadastro salvo. Agora use “Adicionar conta”.');
+  });
+});
+
+loadRegistration();
 loadSettings();
 refresh();
 refreshExtras();
