@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -30,29 +29,20 @@ var googleEndpoint = oauth2.Endpoint{
 
 var scopes = []string{"https://www.googleapis.com/auth/drive", "openid", "email", "profile"}
 
-func envDir(name, fallback string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, fallback)
-}
-
-// The account directory keeps the name used by earlier releases so upgrades keep their sign-ins.
-func configDir() string { return filepath.Join(envDir("XDG_CONFIG_HOME", ".config"), "opengdrive") }
+// Where each system keeps settings, data, cache and the control socket is in os_<system>.go.
 
 // GCP_DRIVE_STATE isolates data, cache and the control socket for test runs.
 func dataDir() string {
 	if v := os.Getenv("GCP_DRIVE_STATE"); v != "" {
 		return filepath.Join(v, "data")
 	}
-	return filepath.Join(envDir("XDG_DATA_HOME", ".local/share"), "opengdrive")
+	return defaultDataDir()
 }
 func cacheRoot() string {
 	if v := os.Getenv("GCP_DRIVE_STATE"); v != "" {
 		return filepath.Join(v, "cache")
 	}
-	return filepath.Join(envDir("XDG_CACHE_HOME", ".cache"), "gcp-drive")
+	return defaultCacheDir()
 }
 func socketPath() string {
 	if v := os.Getenv("GCP_DRIVE_SOCKET"); v != "" {
@@ -61,10 +51,7 @@ func socketPath() string {
 	if v := os.Getenv("GCP_DRIVE_STATE"); v != "" {
 		return filepath.Join(v, "control.sock")
 	}
-	if v := os.Getenv("XDG_RUNTIME_DIR"); v != "" {
-		return filepath.Join(v, "gcp-drive.sock")
-	}
-	return filepath.Join(dataDir(), "control.sock")
+	return defaultSocketPath()
 }
 func mountRoot() string {
 	if v := os.Getenv("GCP_DRIVE_MOUNT_ROOT"); v != "" {
@@ -183,8 +170,8 @@ type installedClient struct {
 
 func loadDesktopOAuth() (id, secret string, err error) {
 	exe, _ := os.Executable()
-	candidates := []string{os.Getenv("GCP_DRIVE_OAUTH"), "/usr/lib/opengdrive/google-oauth.json", filepath.Join(filepath.Dir(exe), "google-oauth.json")}
-	for _, path := range candidates {
+	candidates := append([]string{os.Getenv("GCP_DRIVE_OAUTH")}, installedOAuthPaths...)
+	for _, path := range append(candidates, filepath.Join(filepath.Dir(exe), "google-oauth.json")) {
 		if path == "" {
 			continue
 		}
@@ -242,7 +229,7 @@ func login(ctx context.Context) (string, error) {
 	go server.Serve(listener)
 	defer server.Close()
 	url := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent select_account"), oauth2.S256ChallengeOption(verifier))
-	if err := exec.Command("xdg-open", url).Start(); err != nil {
+	if err := openExternal(url); err != nil {
 		return "", errors.New("Não foi possível abrir o navegador para a autorização.")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)

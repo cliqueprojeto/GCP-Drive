@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 import (
@@ -56,26 +58,6 @@ var (
 	_ fs.NodeStatfser  = (*node)(nil)
 )
 
-func errno(err error) syscall.Errno {
-	switch e := err.(type) {
-	case nil:
-		return 0
-	case syscall.Errno:
-		return e
-	case *statusError:
-		switch {
-		case e.Code == 404:
-			return syscall.ENOENT
-		case e.Code == 403 || e.Code == 401:
-			return syscall.EACCES
-		}
-	}
-	if err == context.Canceled || err == context.DeadlineExceeded {
-		return syscall.EINTR
-	}
-	return syscall.EIO
-}
-
 func linkContent(it *Item) []byte {
 	icon := "x-office-document"
 	switch {
@@ -91,7 +73,7 @@ func linkContent(it *Item) []byte {
 }
 
 func (n *node) fill(out *fuse.Attr) syscall.Errno {
-	out.Uid, out.Gid = n.m.uid, n.m.gid
+	out.Uid, out.Gid = n.m.plat.uid, n.m.plat.gid
 	out.Ino = n.StableAttr().Ino
 	out.Blksize = 1 << 20
 	now := uint64(time.Now().Unix())
@@ -185,13 +167,10 @@ func (n *node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 
 // writable reports whether new entries may be created inside this folder.
 func (n *node) writable() syscall.Errno {
-	if readOnly() {
-		return syscall.EROFS
-	}
-	if n.kind != kindDir || n.cid() == vRoot || n.cid() == vShared || n.cid() == vDrives {
+	if n.kind != kindDir {
 		return syscall.EPERM
 	}
-	return 0
+	return n.m.writableDir(n.cid())
 }
 
 type handle struct {
@@ -446,10 +425,10 @@ func (n *node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 }
 
 func (n *node) Unlink(ctx context.Context, name string) syscall.Errno {
-	return n.m.removeEntry(ctx, n, name, false)
+	return n.m.removeEntry(ctx, n.cid(), name, false)
 }
 func (n *node) Rmdir(ctx context.Context, name string) syscall.Errno {
-	return n.m.removeEntry(ctx, n, name, true)
+	return n.m.removeEntry(ctx, n.cid(), name, true)
 }
 
 func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
@@ -460,5 +439,20 @@ func (n *node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedd
 	if flags != 0 {
 		return syscall.EINVAL
 	}
-	return n.m.rename(ctx, n, name, target, newName)
+	if eno := n.writable(); eno != 0 {
+		return eno
+	}
+	if eno := target.writable(); eno != 0 {
+		return eno
+	}
+	adopted, eno := n.m.rename(ctx, n.cid(), name, target.cid(), newName)
+	if adopted != "" {
+		// The kernel keeps the temporary file's inode under the final name; point it at the item.
+		if child := n.GetChild(name); child != nil {
+			if moved, ok := child.Operations().(*node); ok {
+				moved.content.Store(&adopted)
+			}
+		}
+	}
+	return eno
 }

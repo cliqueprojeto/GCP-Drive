@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sort"
@@ -224,11 +223,11 @@ func (d *Daemon) contextAction(ctx context.Context, args []string) (any, error) 
 		m.mu.Unlock()
 		return map[string]any{"Name": e.It.Name, "IsDir": e.Kind == kindDir, "Provider": "", "Offline": pinned, "Link": webLink(m, e)}, nil
 	case "web", "gemini":
-		return nil, exec.Command("xdg-open", webLink(m, e)).Start()
+		return nil, openExternal(webLink(m, e))
 	case "link":
 		return webLink(m, e), nil
 	case "offline-open":
-		return nil, exec.Command("xdg-open", filepath.Dir(filepath.Clean(args[1]))).Start()
+		return nil, openExternal(filepath.Dir(filepath.Clean(args[1])))
 	case "pin", "unpin":
 		if err := needReal(); err != nil {
 			return nil, err
@@ -463,14 +462,14 @@ func (d *Daemon) serve(listener net.Listener) {
 func runDaemon() error {
 	lockPath := filepath.Join(filepath.Dir(socketPath()), "gcp-drive.lock")
 	_ = os.MkdirAll(filepath.Dir(lockPath), 0o700)
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	unlock, held, err := lockFile(lockPath)
 	if err != nil {
 		return err
 	}
-	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+	if held {
 		return nil // another daemon already serves this session
 	}
-	defer lock.Close()
+	defer unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	set := loadSettings()
 	d := &Daemon{set: set, sched: newSched(set), mounts: map[string]*Mount{}, ctx: ctx, stop: cancel}
@@ -545,11 +544,11 @@ func main() {
 	args := os.Args[1:]
 	if len(args) == 0 {
 		// Opening the application entry starts the graphical panel.
-		ui := "/usr/bin/gcp-drive-ui"
-		if err := syscall.Exec(ui, []string{ui}, os.Environ()); err != nil {
-			fmt.Fprintln(os.Stderr, "A interface do GCP-Drive não está instalada.")
+		if err := launchPanel(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
+		return
 	}
 	var out string
 	var err error

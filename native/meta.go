@@ -260,15 +260,14 @@ func (m *Meta) item(id string) *Item {
 	return m.Items[id]
 }
 
-var invalidName = strings.NewReplacer("/", "∕", "\x00", "")
-
+// visibleName turns a Drive name into one the local file system accepts; localName and linkSuffix are per system.
 func visibleName(it *Item, kind int) string {
-	name := invalidName.Replace(it.Name)
+	name := localName(it.Name)
 	if name == "" || name == "." || name == ".." {
 		name = "_" + name
 	}
 	if kind == kindLink {
-		name += ".desktop"
+		name += linkSuffix
 	}
 	if len(name) > 250 {
 		ext := filepath.Ext(name)
@@ -641,7 +640,7 @@ func (m *Meta) poll(ctx context.Context, d *Drive) error {
 func (m *Meta) walk(ctx context.Context, d *Drive, rel string) (entry, string, bool) {
 	dir := vRoot
 	var e entry
-	parts := strings.Split(strings.Trim(rel, "/"), "/")
+	parts := strings.Split(strings.Trim(filepath.ToSlash(rel), "/"), "/")
 	for i, part := range parts {
 		if part == "" {
 			return entry{}, "", false

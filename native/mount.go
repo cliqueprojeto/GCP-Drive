@@ -9,15 +9,11 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 // Pending is a local copy with changes that still have to reach the Drive.
@@ -49,16 +45,15 @@ type Activity struct {
 }
 
 type Mount struct {
-	a      *Account
-	set    *Settings
-	sched  *Sched
-	drive  *Drive
-	meta   *Meta
-	cache  *Cache
-	path   string
-	server *fuse.Server
-	uid    uint32
-	gid    uint32
+	a     *Account
+	set   *Settings
+	sched *Sched
+	drive *Drive
+	meta  *Meta
+	cache *Cache
+	path  string
+	// plat is how this system shows the account as a folder; see mount_<system>.go.
+	plat platform
 
 	mu       sync.Mutex
 	pend     map[string]*Pending
@@ -71,10 +66,11 @@ type Mount struct {
 	limit    int64
 	quotaAt  time.Time
 	cancel   context.CancelFunc
+	on       bool
 }
 
 func newMount(a *Account, set *Settings, sched *Sched) *Mount {
-	m := &Mount{a: a, set: set, sched: sched, path: filepath.Join(mountRoot(), a.Email), uid: uint32(os.Getuid()), gid: uint32(os.Getgid()),
+	m := &Mount{a: a, set: set, sched: sched, path: filepath.Join(mountRoot(), a.Email),
 		pend: map[string]*Pending{}, pins: map[string]bool{}, problems: map[string]string{}}
 	m.drive = newDrive(a, sched)
 	m.meta = newMeta(filepath.Join(dataDir(), "mapa", a.ID+".v2.gob.gz"))
@@ -467,12 +463,44 @@ func (m *Mount) discard(ctx context.Context, id string) {
 	}
 }
 
-func (m *Mount) removeEntry(ctx context.Context, dir *node, name string, wantDir bool) syscall.Errno {
-	if eno := dir.writable(); eno != 0 {
+// errno gives each failure the code programs expect from a file system.
+func errno(err error) syscall.Errno {
+	switch e := err.(type) {
+	case nil:
+		return 0
+	case syscall.Errno:
+		return e
+	case *statusError:
+		switch {
+		case e.Code == 404:
+			return syscall.ENOENT
+		case e.Code == 403 || e.Code == 401:
+			return syscall.EACCES
+		}
+	}
+	if err == context.Canceled || err == context.DeadlineExceeded {
+		return syscall.EINTR
+	}
+	return syscall.EIO
+}
+
+// writableDir reports whether new entries may be created inside the folder dir.
+func (m *Mount) writableDir(dir string) syscall.Errno {
+	if readOnly() {
+		return syscall.EROFS
+	}
+	if dir == vRoot || dir == vShared || dir == vDrives {
+		return syscall.EPERM
+	}
+	return 0
+}
+
+func (m *Mount) removeEntry(ctx context.Context, dir, name string, wantDir bool) syscall.Errno {
+	if eno := m.writableDir(dir); eno != 0 {
 		return eno
 	}
-	_ = m.meta.ensure(ctx, m.drive, dir.cid())
-	e, ok := m.meta.find(dir.cid(), name)
+	_ = m.meta.ensure(ctx, m.drive, dir)
+	e, ok := m.meta.find(dir, name)
 	if !ok {
 		return syscall.ENOENT
 	}
@@ -508,26 +536,28 @@ func (m *Mount) removeEntry(ctx context.Context, dir *node, name string, wantDir
 	return 0
 }
 
-func (m *Mount) rename(ctx context.Context, from *node, name string, to *node, newName string) syscall.Errno {
-	if eno := from.writable(); eno != 0 {
-		return eno
+// rename moves or renames an entry between the folders from and to. When a temporary file replaces an
+// existing item (save-by-rename), adopted is that item's ID: the bytes now belong to it.
+func (m *Mount) rename(ctx context.Context, from, name, to, newName string) (adopted string, eno syscall.Errno) {
+	if eno := m.writableDir(from); eno != 0 {
+		return "", eno
 	}
-	if eno := to.writable(); eno != 0 {
-		return eno
+	if eno := m.writableDir(to); eno != 0 {
+		return "", eno
 	}
-	_ = m.meta.ensure(ctx, m.drive, from.cid())
-	_ = m.meta.ensure(ctx, m.drive, to.cid())
-	src, ok := m.meta.find(from.cid(), name)
+	_ = m.meta.ensure(ctx, m.drive, from)
+	_ = m.meta.ensure(ctx, m.drive, to)
+	src, ok := m.meta.find(from, name)
 	if !ok {
-		return syscall.ENOENT
+		return "", syscall.ENOENT
 	}
-	dst, exists := m.meta.find(to.cid(), newName)
+	dst, exists := m.meta.find(to, newName)
 	if exists && dst.It.ID == src.It.ID {
-		return 0
+		return "", 0
 	}
 	if exists {
 		if dst.Kind == kindDir || src.Kind == kindDir {
-			return syscall.EEXIST
+			return "", syscall.EEXIST
 		}
 		// Saving through a temporary file: its bytes become the next revision of the existing item.
 		m.mu.Lock()
@@ -554,18 +584,11 @@ func (m *Mount) rename(ctx context.Context, from *node, name string, to *node, n
 		m.mu.Unlock()
 		if movable {
 			_ = m.persist(p)
-			// The kernel keeps the temporary file's inode under the final name; point it at the item.
-			if child := from.GetChild(name); child != nil {
-				if moved, ok := child.Operations().(*node); ok {
-					target := dst.Content.ID
-					moved.content.Store(&target)
-				}
-			}
 			m.meta.remove(src.It.ID)
-			return 0
+			return dst.Content.ID, 0
 		}
 		if eno := m.removeEntry(ctx, to, newName, false); eno != 0 {
-			return eno
+			return "", eno
 		}
 	}
 	if src.It.Local {
@@ -573,18 +596,18 @@ func (m *Mount) rename(ctx context.Context, from *node, name string, to *node, n
 		p := m.pend[src.It.ID]
 		idle := p != nil && !p.sending
 		if idle {
-			p.Name, p.Parent = newName, to.cid()
+			p.Name, p.Parent = newName, to
 			p.gen++
 		}
 		m.mu.Unlock()
 		if idle {
 			_ = m.persist(p)
 			it := *src.It
-			it.Name, it.Parents = newName, []string{to.cid()}
+			it.Name, it.Parents = newName, []string{to}
 			m.meta.mu.Lock()
 			m.meta.put(&it)
 			m.meta.mu.Unlock()
-			return 0
+			return "", 0
 		}
 		// The upload is finishing; rename the item it creates.
 		for i := 0; i < 600 && m.meta.item(src.It.ID) != nil && m.meta.item(src.It.ID).Local; i++ {
@@ -592,14 +615,14 @@ func (m *Mount) rename(ctx context.Context, from *node, name string, to *node, n
 		}
 	}
 	q := url.Values{}
-	if from.cid() != to.cid() {
-		q.Set("addParents", to.cid())
-		q.Set("removeParents", from.cid())
+	if from != to {
+		q.Set("addParents", to)
+		q.Set("removeParents", from)
 	}
 	f, err := m.drive.patch(ctx, src.It.ID, map[string]any{"name": newName}, q)
 	if err != nil {
 		m.problem("Renomear", name, err)
-		return errno(err)
+		return "", errno(err)
 	}
 	m.mu.Lock()
 	if p := m.pend[src.It.ID]; p != nil {
@@ -607,7 +630,7 @@ func (m *Mount) rename(ctx context.Context, from *node, name string, to *node, n
 	}
 	m.mu.Unlock()
 	m.meta.apply(f)
-	return 0
+	return "", 0
 }
 
 // pinnedFiles expands offline selections to the files they contain.
@@ -728,44 +751,14 @@ func (m *Mount) syncLoop(ctx context.Context) {
 	}
 }
 
-func mounted(path string) bool {
-	data, _ := os.ReadFile("/proc/self/mountinfo")
-	escaped := strings.NewReplacer(" ", `\040`, "\t", `\011`, "\n", `\012`, `\`, `\134`).Replace(path)
-	for _, line := range strings.Split(string(data), "\n") {
-		if fields := strings.Fields(line); len(fields) > 4 && fields[4] == escaped {
-			return true
-		}
-	}
-	return false
-}
-
+// start shows the account as a folder and begins following the Drive.
 func (m *Mount) start(parent context.Context) error {
-	if mounted(m.path) {
-		// A mount left behind by a process that ended without unmounting.
-		if _, err := os.Stat(m.path); err == nil {
-			return errors.New("A pasta desta conta ainda está em uso pela versão anterior. O GCP-Drive tentará de novo em instantes.")
-		}
-		_ = exec.Command("fusermount3", "-u", "-z", m.path).Run()
-	}
-	if err := os.MkdirAll(m.path, 0o700); err != nil {
+	if err := m.attach(); err != nil {
 		return err
-	}
-	if entries, err := os.ReadDir(m.path); err == nil && len(entries) > 0 {
-		return errors.New("A pasta de montagem desta conta contém arquivos. Mova-os para outro lugar e reinicie o GCP-Drive.")
-	}
-	root := newNode(m, vRoot, vRoot, kindDir)
-	entry, attr := 2*time.Second, 2*time.Second
-	server, err := fs.Mount(m.path, root, &fs.Options{
-		EntryTimeout: &entry, AttrTimeout: &attr, UID: m.uid, GID: m.gid,
-		MountOptions: fuse.MountOptions{FsName: "OpenGdrive:" + m.a.ID, Name: "opengdrive", MaxReadAhead: 1 << 20, MaxWrite: 1 << 20,
-			MaxBackground: 64, DisableXAttrs: true, IgnoreSecurityLabels: true, Options: []string{"default_permissions"}},
-	})
-	if err != nil {
-		return errors.New("Não foi possível montar a unidade. Verifique se o FUSE 3 está instalado.")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	m.mu.Lock()
-	m.server, m.cancel = server, cancel
+	m.cancel, m.on = cancel, true
 	m.mu.Unlock()
 	go m.syncLoop(ctx)
 	go m.offlineLoop(ctx)
@@ -778,22 +771,20 @@ func (m *Mount) start(parent context.Context) error {
 func (m *Mount) isMounted() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.server != nil
+	return m.on
 }
 
 func (m *Mount) stop() {
 	m.mu.Lock()
-	server, cancel := m.server, m.cancel
-	m.server, m.cancel = nil, nil
+	cancel, on := m.cancel, m.on
+	m.cancel, m.on = nil, false
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
 	m.meta.save()
-	if server != nil {
-		if err := server.Unmount(); err != nil {
-			_ = exec.Command("fusermount3", "-u", "-z", m.path).Run()
-		}
+	if on {
+		m.detach()
 	}
 }
 

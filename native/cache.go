@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -293,11 +292,9 @@ func (f *cfile) fill(ctx context.Context) error {
 
 func (c *Cache) limit() int64 {
 	limit := int64(c.set.CacheGB) << 30
-	var st syscall.Statfs_t
-	if syscall.Statfs(c.root, &st) == nil {
+	if free, ok := diskFree(c.root); ok {
 		// Keep 1 GiB of the disk free regardless of the configured size.
-		free := int64(st.Bavail)*int64(st.Bsize) - 1<<30
-		limit = min(limit, max(c.total.Load()+free, 64<<20))
+		limit = min(limit, max(c.total.Load()+free-1<<30, 64<<20))
 	}
 	return limit
 }
