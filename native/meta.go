@@ -34,6 +34,8 @@ type Item struct {
 	Target, TargetMime string
 	Owned, CanEdit     bool
 	CanShare           bool
+	// Shared marks items the Drive lists under "Shared with me".
+	Shared bool
 	// Local marks an item that exists only on this computer until its upload finishes.
 	Local bool
 }
@@ -76,6 +78,9 @@ type Meta struct {
 	kids     map[string]map[string]bool
 	listings map[string][]entry
 	missing  map[string]bool
+	targeted map[string]bool
+	sharedAt time.Time
+	stale    bool
 	loading  map[string]chan struct{}
 	dirty    bool
 	path     string
@@ -85,7 +90,7 @@ type Meta struct {
 }
 
 func newMeta(path string) *Meta {
-	m := &Meta{path: path, kids: map[string]map[string]bool{}, listings: map[string][]entry{}, missing: map[string]bool{}, loading: map[string]chan struct{}{}}
+	m := &Meta{path: path, kids: map[string]map[string]bool{}, listings: map[string][]entry{}, missing: map[string]bool{}, targeted: map[string]bool{}, loading: map[string]chan struct{}{}}
 	m.Items, m.Loaded = map[string]*Item{}, map[string]bool{}
 	if f, err := os.Open(path); err == nil {
 		defer f.Close()
@@ -154,9 +159,40 @@ func (m *Meta) unlink(it *Item) {
 func toItem(f *apiFile) *Item {
 	size, _ := strconv.ParseInt(f.Size, 10, 64)
 	t, _ := time.Parse(time.RFC3339, f.ModifiedTime)
-	return &Item{ID: f.ID, Name: f.Name, Mime: f.MimeType, Parents: f.Parents, Size: size, MTime: t.Unix(), MD5: f.MD5,
-		Link: f.WebViewLink, DriveID: f.DriveID, Target: f.Shortcut.TargetID, TargetMime: f.Shortcut.TargetMime,
+	it := &Item{ID: f.ID, Name: f.Name, Mime: intern(f.MimeType), Parents: f.Parents, Size: size, MTime: t.Unix(), MD5: f.MD5,
+		DriveID: intern(f.DriveID), Shared: f.SharedTime != "", Target: f.Shortcut.TargetID, TargetMime: intern(f.Shortcut.TargetMime),
 		Owned: f.OwnedByMe, CanEdit: f.Capabilities.CanEdit, CanShare: f.Capabilities.CanShare}
+	// Only editor documents have a web address that cannot be rebuilt from the ID.
+	if it.isNative() || it.Mime == mimeLink {
+		it.Link = f.WebViewLink
+	}
+	return it
+}
+
+var (
+	internMu sync.Mutex
+	interned = map[string]string{}
+)
+
+// intern keeps one copy of values repeated across hundreds of thousands of items.
+func intern(s string) string {
+	internMu.Lock()
+	defer internMu.Unlock()
+	if v, ok := interned[s]; ok {
+		return v
+	}
+	interned[s] = s
+	return s
+}
+
+func linkOf(it *Item) string {
+	switch {
+	case it.Link != "":
+		return it.Link
+	case it.isDir():
+		return "https://drive.google.com/drive/folders/" + url.PathEscape(it.ID)
+	}
+	return "https://drive.google.com/file/d/" + url.PathEscape(it.ID) + "/view"
 }
 
 // put inserts or replaces an item and returns the folders whose listing changed. Caller holds mu.
@@ -171,8 +207,14 @@ func (m *Meta) put(it *Item) []string {
 	for _, p := range it.Parents {
 		delete(m.listings, p)
 	}
-	delete(m.listings, vShared)
+	m.stale = true
 	delete(m.missing, it.ID)
+	if it.Mime == mimeLink {
+		delete(m.targeted, vShared)
+		for _, p := range it.Parents {
+			delete(m.targeted, p)
+		}
+	}
 	m.dirty = true
 	return append(dirs, it.Parents...)
 }
@@ -184,7 +226,7 @@ func (m *Meta) drop(id string) []string {
 	}
 	m.unlink(old)
 	delete(m.Items, id)
-	delete(m.listings, vShared)
+	m.stale = true
 	m.dirty = true
 	return append([]string{vShared}, old.Parents...)
 }
@@ -265,16 +307,7 @@ func (m *Meta) childIDs(dir string) []string {
 	var ids []string
 	if dir == vShared {
 		for id, it := range m.Items {
-			if it.Owned || it.DriveID != "" || it.Local {
-				continue
-			}
-			orphan := true
-			for _, p := range it.Parents {
-				if m.Items[p] != nil || p == m.RootID {
-					orphan = false
-				}
-			}
-			if orphan {
+			if it.Shared && !it.Local {
 				ids = append(ids, id)
 			}
 		}
@@ -289,13 +322,17 @@ func (m *Meta) childIDs(dir string) []string {
 // listing returns the visible names of a folder, with stable de-duplication.
 func (m *Meta) listing(dir string) []entry {
 	m.mu.RLock()
-	if cached, ok := m.listings[dir]; ok {
-		m.mu.RUnlock()
+	cached, ok := m.listings[dir]
+	fresh := dir != vShared || !m.stale || (m.crawling && time.Since(m.sharedAt) < 2*time.Second)
+	m.mu.RUnlock()
+	if ok && fresh {
 		return cached
 	}
-	m.mu.RUnlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if dir == vShared {
+		m.stale, m.sharedAt = false, time.Now()
+	}
 	var out []entry
 	switch dir {
 	case vRoot:
@@ -324,7 +361,9 @@ func (m *Meta) listing(dir string) []entry {
 		sort.Strings(ids)
 		items := make([]*Item, 0, len(ids))
 		for _, id := range ids {
-			items = append(items, m.Items[id])
+			if it := m.Items[id]; it != nil {
+				items = append(items, it)
+			}
 		}
 		sort.SliceStable(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 		used := map[string]int{}
@@ -355,6 +394,12 @@ func (m *Meta) find(dir, name string) (entry, bool) {
 // ensure loads one folder on demand while the full map is still being built.
 func (m *Meta) ensure(ctx context.Context, d *Drive, dir string) error {
 	if dir == vRoot || dir == vDrives || dir == "" || strings.HasPrefix(dir, "local:") {
+		return nil
+	}
+	m.mu.RLock()
+	ready := (m.Complete || m.Loaded[dir]) && m.targeted[dir]
+	m.mu.RUnlock()
+	if ready {
 		return nil
 	}
 	m.mu.Lock()
@@ -422,6 +467,9 @@ func (m *Meta) targets(ctx context.Context, d *Drive, dir string) error {
 		delete(m.listings, dir)
 		m.mu.Unlock()
 	}
+	m.mu.Lock()
+	m.targeted[dir] = true
+	m.mu.Unlock()
 	return nil
 }
 

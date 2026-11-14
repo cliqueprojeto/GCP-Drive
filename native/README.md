@@ -7,7 +7,7 @@ Cliente do Google Drive para Linux sem rclone. Cada conta aparece como uma pasta
 | Parte | Arquivo | Papel |
 |---|---|---|
 | Mapa de pastas | `meta.go` | Lê a árvore da conta uma vez (`files.list`) e depois aplica só as alterações (`changes.list`, a cada 20 s). Fica salvo em `~/.local/share/opengdrive/mapa`. Enquanto o mapa não termina, cada pasta é carregada na primeira visita. |
-| Cache de blocos | `cache.go` | Blocos de 1 MiB em `~/.cache/gcp-drive`. Leitura sequencial dobra o pedido até 16 MiB por requisição. Um leitor cancelado não cancela o download. Limite configurável, com descarte do menos usado; cópias off-line não são descartadas. |
+| Cache de blocos | `cache.go` | Blocos de 256 KiB em `~/.cache/gcp-drive`. A primeira leitura pede um bloco; leitura sequencial dobra o pedido até 16 MiB por requisição, e cada bloco é entregue assim que chega. Um leitor cancelado não cancela o download. Limite configurável, com descarte do menos usado; cópias off-line não são descartadas. |
 | Prioridade e banda | `api.go` (`Sched`) | Abrir arquivo e listar pasta passam na frente; mapa, leitura antecipada e cópias off-line esperam. Limites de download e envio em KB/s. |
 | Gravação | `mount.go` | Alterações vão para uma cópia local em `~/.local/share/opengdrive/envios` e sobem 5 s depois de o arquivo ser fechado. Salvar por arquivo temporário + renomear vira uma nova revisão do mesmo item. Conflito com alteração remota gera um segundo arquivo. Excluir manda para a lixeira do Drive. Arquivos de trava de editores não são enviados. |
 | Sistema de arquivos | `fs.go` | go-fuse. Documentos do Google (Docs, Planilhas…) aparecem como atalhos `.desktop` que abrem no navegador. |

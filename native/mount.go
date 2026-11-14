@@ -77,7 +77,7 @@ func newMount(a *Account, set *Settings, sched *Sched) *Mount {
 	m := &Mount{a: a, set: set, sched: sched, path: filepath.Join(mountRoot(), a.Email), uid: uint32(os.Getuid()), gid: uint32(os.Getgid()),
 		pend: map[string]*Pending{}, pins: map[string]bool{}, problems: map[string]string{}}
 	m.drive = newDrive(a, sched)
-	m.meta = newMeta(filepath.Join(dataDir(), "mapa", a.ID+".gob.gz"))
+	m.meta = newMeta(filepath.Join(dataDir(), "mapa", a.ID+".v2.gob.gz"))
 	m.cache = newCache(filepath.Join(cacheRoot(), a.ID), m.drive, set, func(id string) bool {
 		m.mu.Lock()
 		defer m.mu.Unlock()

@@ -90,4 +90,24 @@ Executado na 0.5.0:
 - As sete páginas da interface foram renderizadas com dados de exemplo em janela fora da tela, sem exceções, e conferidas por captura.
 - `package.sh` gerou `.pkg.tar.zst`, `.deb` e `.rpm`. Conferidos: lista de arquivos, dono `root`, permissões dos executáveis, dependências declaradas e SHA-256.
 
-Não executado: o motor 0.5.0 contra contas Google reais (leitura, gravação, mapa completo, limites de banda, conflito de versões), instalação dos pacotes, atualização a partir da 0.4.3, Dolphin/Nautilus/Nemo com a unidade nova, bandeja, login OAuth, Debian/Ubuntu e Fedora. O Drive simulado não reproduz latência, cota nem erros do Google. Não há versão para Windows ou macOS deste motor.
+Ensaio somente leitura com as cinco contas Google reais, autorizado pelo usuário, em pasta de montagem, dados e cache separados do cliente instalado (`GCP_DRIVE_READONLY=1`). Linha medida em 29,6 Mbit/s (10 MB de um CDN).
+
+| Cenário | 0.4.3 instalada | 0.5.0 |
+|---|---:|---:|
+| Mapa completo das 5 contas (289.824 itens) | não tem | 367 s, uma vez |
+| Pasta nunca visitada, com o mapa pronto | ~290 ms | ~5 ms |
+| Árvore de `Meu Drive` (20.377 entradas, só nomes) | não medido | 0,98 s |
+| Primeiros 4 KiB de 6 arquivos nunca abertos, em sequência | 14,9 s | 4,9 s |
+| Idem, 6 arquivos em paralelo | não medido | 2,8 s |
+| Os mesmos 12 arquivos, de novo | não medido | 21 ms |
+| Arquivo de 4,4 MB, segunda leitura | 5,0 s | 4 ms |
+| Arquivo de 34 MiB, primeira leitura | não medido | 14,7 s (19 Mbit/s) |
+| Arquivo de 34 MiB, segunda leitura | não medido | 5 ms |
+
+O MD5 do arquivo de 4,4 MB lido pelos dois clientes coincidiu. Uma tentativa de criar arquivo foi recusada com "somente leitura". Nenhuma falha de leitura foi registrada. "Compartilhados comigo" listou 0/1204/31/285/350 itens contra 0/1148/28/254/329 do cliente instalado; a 0.5.0 mostra com sufixo ` (2)` os nomes duplicados que a 0.4.3 omite. O serviço ocupou cerca de 410 MB de memória com os 290 mil itens mapeados.
+
+O ensaio real levou a três mudanças: blocos de 256 KiB em vez de 1 MiB (com 1 MiB, inspecionar o começo de um arquivo custava 2,3 s nesta linha), resolução de atalhos uma vez por pasta e a regra de "Compartilhados comigo" pelo campo `sharedWithMeTime`.
+
+A primeira abertura de cada arquivo ainda custa cerca de 0,8 s de espera do Google Drive; o cache só elimina isso da segunda vez em diante.
+
+Não executado: gravação do motor 0.5.0 em contas Google reais (envio, revisão, conflito de versões, lixeira), limites de banda com tráfego real, instalação dos pacotes, atualização a partir da 0.4.3, Dolphin/Nautilus/Nemo com a unidade nova, bandeja, login OAuth, Debian/Ubuntu e Fedora. O Drive simulado não reproduz latência, cota nem erros do Google. Não há versão para Windows ou macOS deste motor.

@@ -232,7 +232,7 @@ func TestEngine(t *testing.T) {
 	fake.mu.Lock()
 	requests := fake.media
 	fake.mu.Unlock()
-	if requests > 4 {
+	if requests > 6 {
 		t.Fatalf("a %d-block file took %d range requests", len(big)/chunkSize+1, requests)
 	}
 	m.stop() // drop the kernel's page cache by remounting

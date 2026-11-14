@@ -55,6 +55,9 @@ func cacheRoot() string {
 	return filepath.Join(envDir("XDG_CACHE_HOME", ".cache"), "gcp-drive")
 }
 func socketPath() string {
+	if v := os.Getenv("GCP_DRIVE_SOCKET"); v != "" {
+		return v
+	}
 	if v := os.Getenv("GCP_DRIVE_STATE"); v != "" {
 		return filepath.Join(v, "control.sock")
 	}

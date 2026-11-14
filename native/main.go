@@ -147,16 +147,16 @@ func webLink(m *Mount, e entry) string {
 	if it == nil {
 		it = e.It
 	}
-	if it.Link != "" {
-		return it.Link
-	}
 	switch it.ID {
 	case vShared:
 		return "https://drive.google.com/drive/shared-with-me"
 	case vDrives:
 		return "https://drive.google.com/drive/shared-drives"
 	}
-	return "https://drive.google.com/drive/folders/" + url.PathEscape(it.ID)
+	if it.ID == m.meta.RootID {
+		return "https://drive.google.com/drive/my-drive"
+	}
+	return linkOf(it)
 }
 
 func (d *Daemon) addFile(ctx context.Context, m *Mount, parent, source string) error {
@@ -385,7 +385,7 @@ func (d *Daemon) handle(ctx context.Context, args []string) (any, error) {
 			m.meta.mu.RLock()
 			for _, it := range m.meta.Items {
 				if len(rows) < 200 && strings.Contains(strings.ToLower(it.Name), query) {
-					rows = append(rows, map[string]string{"Name": it.Name, "Link": it.Link})
+					rows = append(rows, map[string]string{"Name": it.Name, "Link": linkOf(it)})
 				}
 			}
 			m.meta.mu.RUnlock()

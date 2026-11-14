@@ -26,7 +26,7 @@ var (
 )
 
 const (
-	itemFields = "id,name,mimeType,parents,size,modifiedTime,md5Checksum,trashed,webViewLink,driveId,ownedByMe,capabilities(canEdit,canShare),shortcutDetails(targetId,targetMimeType)"
+	itemFields = "id,name,mimeType,parents,size,modifiedTime,md5Checksum,trashed,webViewLink,driveId,ownedByMe,sharedWithMeTime,capabilities(canEdit,canShare),shortcutDetails(targetId,targetMimeType)"
 )
 
 const (
@@ -252,6 +252,7 @@ type apiFile struct {
 	WebViewLink  string   `json:"webViewLink"`
 	DriveID      string   `json:"driveId"`
 	OwnedByMe    bool     `json:"ownedByMe"`
+	SharedTime   string   `json:"sharedWithMeTime"`
 	Capabilities struct {
 		CanEdit  bool `json:"canEdit"`
 		CanShare bool `json:"canShare"`

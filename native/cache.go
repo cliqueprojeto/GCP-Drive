@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	chunkSize = 1 << 20
-	maxWindow = 16
+	// Small blocks let a program that only inspects the start of a file get it after 256 KiB.
+	chunkSize = 256 << 10
+	maxWindow = 64
 )
 
 type fetch struct {
@@ -72,9 +73,9 @@ func dirBytes(root string) int64 {
 
 func versionKey(it *Item) string {
 	if it.MD5 != "" {
-		return it.MD5
+		return it.MD5 + "-b256"
 	}
-	return fmt.Sprintf("t%d-%d", it.MTime, it.Size)
+	return fmt.Sprintf("t%d-%d-b256", it.MTime, it.Size)
 }
 
 func safeID(id string) string { return strings.NewReplacer("/", "_", ".", "_").Replace(id) }
@@ -205,8 +206,6 @@ func (f *cfile) ReadAt(ctx context.Context, p []byte, off int64, r *reader, prio
 			if job == nil {
 				if idx == r.next && r.win > 0 {
 					r.win = min(r.win*2, maxWindow)
-				} else if idx == 0 {
-					r.win = 2
 				} else {
 					r.win = 1
 				}
@@ -284,7 +283,7 @@ func (f *cfile) fill(ctx context.Context) error {
 		if ok {
 			continue
 		}
-		r.next, r.win = idx, 4
+		r.next, r.win = idx, 16
 		if _, err := f.ReadAt(ctx, buf[:1], int64(idx)*chunkSize, r, prioBackground); err != nil {
 			return err
 		}
