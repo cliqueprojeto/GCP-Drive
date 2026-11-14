@@ -38,6 +38,6 @@ GOOS=windows go vet ./...
 ./package.sh
 ```
 
-`go test` monta uma unidade FUSE temporária contra um Google Drive simulado em memória; não usa contas reais. `package.sh` grava os pacotes e o `SHA256SUMS.txt` em `.local/installers/<versão>` e lê o cadastro OAuth do aplicativo de `GCP_DRIVE_OAUTH_FILE` (não versionado).
+`go test` monta uma unidade FUSE temporária contra um Google Drive simulado em memória; não usa contas reais. `package.sh` grava os pacotes e o `SHA256SUMS.txt` em `.local/installers/<versão>` sem nenhum cadastro do aplicativo no Google: cada pessoa entrega o seu ao painel ([guia](../docs/CADASTRO-GOOGLE.md)). `GCP_DRIVE_OAUTH_FILE` embute um cadastro, só para uso particular; esse arquivo nunca é versionado.
 
 Variáveis para ensaio isolado: `GCP_DRIVE_STATE` (dados, cache e socket), `GCP_DRIVE_MOUNT_ROOT` (pasta das montagens) e `GCP_DRIVE_READONLY=1` (recusa qualquer gravação).

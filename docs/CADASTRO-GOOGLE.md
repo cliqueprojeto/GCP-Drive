@@ -1,6 +1,6 @@
 # Cadastro no Google para o GCP-Drive
 
-Para entrar numa Conta do Google, o Google exige que todo aplicativo tenha um cadastro. O instalador do GCP-Drive não traz um cadastro pronto: cada pessoa cria o seu, gratuitamente, na própria Conta do Google. Leva cerca de 10 minutos e é feito uma vez só. O mesmo passo a passo está dentro do aplicativo, no painel, em **Cadastro no Google › Ver o passo a passo ilustrado**, com botões que abrem cada página.
+Para entrar numa Conta do Google, o Google exige que todo aplicativo tenha um cadastro. O instalador do GCP-Drive não traz um cadastro pronto: cada pessoa cria o seu, gratuitamente, na própria Conta do Google. Leva cerca de 10 minutos e é feito uma vez só. No Windows, o mesmo passo a passo está dentro do aplicativo, no painel, em **Cadastro no Google › Ver o passo a passo ilustrado**, com botões que abrem cada página. No Linux, o painel abre esta página pelo botão **Ver o passo a passo**.
 
 O arquivo do cadastro fica só no seu computador. Ele identifica o seu cadastro e não deve ser publicado.
 
@@ -38,7 +38,9 @@ No menu **Clientes**, clique em **Criar cliente**. Em **Tipo de aplicativo** esc
 
 ## 6. Entregue o arquivo ao GCP-Drive
 
-No painel do GCP-Drive, no quadro **Cadastro no Google**, clique em **Escolher arquivo** e selecione o arquivo baixado. Depois clique em **Adicionar conta**.
+**Windows:** no painel do GCP-Drive, no quadro **Cadastro no Google**, clique em **Escolher arquivo** e selecione o arquivo baixado. Depois clique em **Adicionar conta**.
+
+**Linux:** no painel do GCP-Drive, clique em **Conectar conta do Google**. Na janela **Cadastro no Google**, clique em **Escolher arquivo** e selecione o arquivo baixado; o login começa em seguida. Para trocar o cadastro depois, use **Contas › Cadastro no Google**.
 
 ![Escolher arquivo no painel](../native/panel/guia/6-painel.svg)
 

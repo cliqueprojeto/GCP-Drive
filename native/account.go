@@ -171,6 +171,16 @@ type installedClient struct {
 // ownOAuthPath is where a registration supplied by the user is kept, next to the sign-ins.
 func ownOAuthPath() string { return filepath.Join(configDir(), "google-oauth.json") }
 
+// storeRegistration validates the JSON file of a "desktop app" client downloaded from Google's console
+// and keeps it as the registration this installation signs in with.
+func storeRegistration(data []byte) error {
+	var client installedClient
+	if json.Unmarshal(data, &client) != nil || client.Installed.ClientID == "" || client.Installed.ClientSecret == "" {
+		return errors.New("Este não é o arquivo de um cliente do tipo “App para computador”. Baixe o arquivo JSON na página Clientes da Plataforma de autenticação do Google.")
+	}
+	return writePrivate(ownOAuthPath(), data)
+}
+
 func loadDesktopOAuth() (id, secret string, err error) {
 	exe, _ := os.Executable()
 	candidates := append([]string{os.Getenv("GCP_DRIVE_OAUTH"), ownOAuthPath()}, installedOAuthPaths...)

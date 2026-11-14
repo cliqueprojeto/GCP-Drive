@@ -81,12 +81,7 @@ func (d *Daemon) panelHandler(host, token string) http.Handler {
 		case "/api/registration":
 			// With content, stores the application's registration with Google; always answers whether there is one.
 			if in.ID != "" {
-				var client installedClient
-				if json.Unmarshal([]byte(in.ID), &client) != nil || client.Installed.ClientID == "" || client.Installed.ClientSecret == "" {
-					err = errors.New("Este não é o arquivo de um cliente do tipo “App para computador”. Baixe o arquivo JSON na página Clientes da Plataforma de autenticação do Google.")
-					break
-				}
-				if err = writePrivate(ownOAuthPath(), []byte(in.ID)); err != nil {
+				if err = storeRegistration([]byte(in.ID)); err != nil {
 					break
 				}
 			}

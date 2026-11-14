@@ -566,6 +566,23 @@ func main() {
 		if _, err = login(context.Background()); err == nil {
 			_, err = call([]string{"reload"})
 		}
+	case "registration":
+		// With a file, keeps it as the registration with Google; always tells whether there is one.
+		if len(args) > 1 {
+			var data []byte
+			if data, err = os.ReadFile(args[1]); err != nil {
+				err = errors.New("Não foi possível ler o arquivo escolhido.")
+			} else {
+				err = storeRegistration(data)
+			}
+		}
+		if err == nil {
+			if _, _, missing := loadDesktopOAuth(); missing != nil {
+				out = "ausente"
+			} else {
+				out = "presente"
+			}
+		}
 	default:
 		if strings.HasPrefix(args[0], "gcp-drive:") {
 			return

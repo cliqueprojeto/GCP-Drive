@@ -13,6 +13,7 @@ from drive_places import update_places
 NAME = "GCP-Drive"
 ICON = "gcp-drive"
 CORE = "/usr/bin/gcp-drive"
+GUIDE = "https://github.com/cliqueprojeto/GCP-Drive/blob/HEAD/docs/CADASTRO-GOOGLE.md"
 SUPPORT_SITE = "https://gestaoculturalpro.com.br/"
 SUPPORT_STRIPE = "https://donate.stripe.com/fZu4gzeBSfhbd7451F6Ri00"
 SUPPORT_PIX = ("00020126850014br.gov.bcb.pix0136e474b71b-7491-4eac-992f-632652e5a4eb"
@@ -566,7 +567,56 @@ class Dashboard(Gtk.Application):
         if refresh:
             self.refresh()
 
+    def registration(self, then=None):
+        """Explains the registration with Google and takes the file; then() runs once one is stored."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window, modal=True, message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.NONE, text="Cadastro no Google",
+        )
+        dialog.format_secondary_text(
+            "Para entrar numa Conta do Google, o Google exige um cadastro do aplicativo. "
+            "O GCP-Drive não traz um pronto: cada pessoa cria o seu, de graça, em cerca de 10 minutos, uma vez só.\n\n"
+            "Siga o passo a passo ilustrado, baixe o arquivo que começa com client_secret e escolha-o aqui. "
+            "O arquivo fica só neste computador."
+        )
+        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Ver o passo a passo", Gtk.ResponseType.HELP)
+        dialog.add_button("Escolher arquivo", Gtk.ResponseType.OK)
+        while True:
+            answer = dialog.run()
+            if answer != Gtk.ResponseType.HELP:
+                break
+            open_value(GUIDE, self.window)
+        dialog.destroy()
+        if answer != Gtk.ResponseType.OK:
+            return
+        path = choose_file(self.window, "Arquivo do cadastro no Google (client_secret….json)")
+        if not path:
+            return
+
+        def stored(_, error):
+            if error:
+                message(self.window, "Cadastro no Google", error, True)
+            elif then:
+                then()
+            else:
+                message(self.window, "Cadastro no Google", "Cadastro guardado. Agora é só conectar a conta.")
+
+        communicate(["registration", path], stored)
+
     def add_account(self):
+        if self.login_pending:
+            return
+
+        def checked(out, _):
+            if (out or "").strip() == "ausente":
+                self.registration(self.connect_account)
+            else:
+                self.connect_account()
+
+        communicate(["registration"], checked)
+
+    def connect_account(self):
         if self.login_pending:
             return
         self.login_pending = True
@@ -831,6 +881,7 @@ class Dashboard(Gtk.Application):
             box.pack_start(account, False, False, 0)
         row = horizontal()
         row.pack_start(self.add_account_button("list-add-symbolic"), False, False, 0)
+        row.pack_start(button("Cadastro no Google", self.registration, "pill"), False, False, 0)
         box.pack_start(row, False, False, 0)
 
     def load_settings(self):

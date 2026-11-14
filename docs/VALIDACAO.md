@@ -219,3 +219,15 @@ Em 14 de novembro de 2026, com autorização do usuário, a execução 436022488
 Em 14 de novembro de 2026 o guia ganhou os passos 7 a 9, redesenhados a partir de três capturas do login enviadas pelo autor (aviso de app não verificado, confirmação da conta e caixa de acesso ao Drive), sem os e-mails e nomes que elas mostravam; as capturas não foram versionadas. As três figuras novas foram conferidas num navegador no BigLinux, em tema escuro. Essa mudança é só de página e figuras e não passou por nova execução no runner Windows; `GOOS=windows go vet ./...` concluiu sem avisos.
 
 Ainda em 14 de novembro de 2026, a pedido do usuário, a execução 43628621523 do mesmo workflow, sobre o commit `3d90262` (já com os passos 7 a 9 do guia), repetiu com aprovação a análise estática, os testes do motor e o teste de instalar, atualizar e desinstalar, e substituiu o arquivo do rascunho não publicado `windows-teste` por um novo `GCP-Drive-0.5.0-instalador.exe` (2.889.514 bytes, SHA-256 `455888F89B74C8389F75BA864B8EDB6F91BFD2C4C3AB76F70C414D2A8ECC0DDE`). Continua sendo um instalador de teste: nada nele foi homologado numa área de trabalho do Windows, e o guia dentro dele não foi aberto no Windows.
+
+## Publicação da 0.5.0 sem cadastro embutido (14 de novembro de 2026)
+
+Executado no BigLinux, antes de abrir o repositório:
+
+- Busca em todo o histórico do Git (todos os ramos e etiquetas) por segredos de cliente do Google, identificadores de cliente, tokens de acesso e de atualização, tokens do GitHub, chaves privadas e arquivos de conta: nada encontrado. Os únicos endereços de e-mail no histórico são o do autor, o de contato da Gestão Cultural Pro e endereços de exemplo.
+- `go vet ./...`, `GOOS=windows go vet ./...` e `go test -race ./...` (unidade FUSE temporária contra o Drive simulado): aprovados.
+- Comando novo `gcp-drive registration [arquivo]`, num perfil isolado: um arquivo de cliente do tipo errado e um arquivo inexistente foram recusados com explicação; um arquivo de cliente "App para computador" de teste foi guardado com permissão só do usuário.
+- `native/package.sh` sem `GCP_DRIVE_OAUTH_FILE` gerou `gcp-drive-0.5.0-3-x86_64.pkg.tar.zst`, `gcp-drive_0.5.0-3_amd64.deb` e `gcp-drive-0.5.0-3.x86_64.rpm`. A lista de arquivos dos três foi conferida: nenhum traz `google-oauth.json`; o conteúdo extraído do pacote foi varrido por segredos e identificadores de cliente do Google, sem achados.
+- As imagens `docs/images/painel-windows-exemplo.png` e `docs/images/guia-cadastro.png` foram capturadas das páginas do painel num navegador sem janela, no Linux, com contas e arquivos de exemplo. Não são capturas de uma área de trabalho do Windows.
+
+Não executado: instalar os pacotes 0.5.0-3 em qualquer distribuição (a instalação testada foi a do 0.5.0-2, com cadastro embutido); a janela "Cadastro no Google" do painel do Linux numa sessão gráfica (o código foi apenas compilado); o login no Linux com um cadastro entregue por essa janela; tudo o que já constava como não executado no Windows.

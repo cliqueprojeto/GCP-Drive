@@ -3,9 +3,11 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^const version = "\(.*\)"$/\1/p' "$here/account.go")"
-release=2
-oauth="${GCP_DRIVE_OAUTH_FILE:-/usr/lib/opengdrive/google-oauth.json}"
-[ -r "$oauth" ] || { echo "Cadastro OAuth do aplicativo não encontrado: $oauth" >&2; exit 1; }
+release=3
+# The packages carry no registration with Google: each person hands their own to the panel
+# (docs/CADASTRO-GOOGLE.md). GCP_DRIVE_OAUTH_FILE embeds one, for private builds only.
+oauth="${GCP_DRIVE_OAUTH_FILE:-}"
+[ -z "$oauth" ] || [ -r "$oauth" ] || { echo "Cadastro OAuth do aplicativo não encontrado: $oauth" >&2; exit 1; }
 out="$here/../.local/installers/$version"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -22,9 +24,10 @@ SH
 for f in opengdrive-ui drive_places.py style.css support-pix.png support-stripe.png; do
   install -Dm644 "$here/ui/$f" "$stage/usr/lib/opengdrive/$f"
 done
-install -Dm644 "$oauth" "$stage/usr/lib/opengdrive/google-oauth.json"
+[ -z "$oauth" ] || install -Dm644 "$oauth" "$stage/usr/lib/opengdrive/google-oauth.json"
 for f in "$here"/files/icons/*.svg; do install -Dm644 "$f" "$stage/usr/share/icons/hicolor/scalable/apps/$(basename "$f")"; done
 for f in "$here"/files/servicemenus/*.desktop; do install -Dm644 "$f" "$stage/usr/share/kio/servicemenus/$(basename "$f")"; done
+install -Dm644 "$here/../LICENSE" "$stage/usr/share/licenses/gcp-drive/LICENSE"
 for f in "$here"/files/licenses/*.txt; do install -Dm644 "$f" "$stage/usr/share/licenses/gcp-drive/$(basename "$f")"; done
 install -Dm644 "$here/files/file-manager-extension.py" "$stage/usr/share/nautilus-python/extensions/gcp-drive.py"
 install -Dm644 "$here/files/file-manager-extension.py" "$stage/usr/share/nemo-python/extensions/gcp-drive.py"
@@ -42,8 +45,8 @@ pkgver=$version
 pkgrel=$release
 pkgdesc="$summary"
 arch=('x86_64')
-url="https://gestaoculturalpro.com.br"
-license=('custom')
+url="https://github.com/cliqueprojeto/GCP-Drive"
+license=('GPL-3.0-only')
 depends=('fuse3' 'python' 'python-gobject' 'gtk3' 'libayatana-appindicator' 'xdg-utils' 'wl-clipboard' 'xclip' 'ca-certificates' 'hicolor-icon-theme')
 optdepends=('kde-cli-tools: resolver pastas recentes e resultados de busca do Dolphin' 'python-nautilus: ações no Nautilus' 'nemo-python: ações no Nemo')
 conflicts=('opengdrive' 'gcp-drive-bin')
@@ -89,7 +92,7 @@ Name: gcp-drive
 Version: $version
 Release: $release
 Summary: $summary
-License: Proprietary and BSD-3-Clause
+License: GPL-3.0-only AND BSD-3-Clause
 URL: https://gestaoculturalpro.com.br
 BuildArch: x86_64
 AutoReqProv: no
