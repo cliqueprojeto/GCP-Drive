@@ -213,3 +213,5 @@ Executado no GitHub Actions, runner `windows-latest`, workflow `Native engine (W
 Executado no BigLinux: a página do guia (`native/panel/guia.html`) e o quadro "Cadastro no Google" do painel foram abertos num navegador com dados de exemplo, em tema escuro; conferidas as figuras dos passos 1 a 3 e a disposição do quadro.
 
 Não executado: escolher um arquivo pelo botão do painel numa janela real; os botões do guia que abrem as páginas do Google; o percurso de criar o cadastro numa Conta do Google (os nomes das telas vieram da documentação pública do Google de 14 de novembro de 2026, não de uma conta); o login com um cadastro criado por esse guia e o aviso "O Google não verificou este app"; as figuras 4 a 7 e o tema claro.
+
+Em 14 de novembro de 2026, com autorização do usuário, a execução 43602248834 do mesmo workflow repetiu os testes e anexou `GCP-Drive-0.5.0-instalador.exe` (2.888.893 bytes, SHA-256 `FF1EA27985A72C8C22BC405713F8CF920C65F59339BD6505A581C35BE80A445D`) a um rascunho de versão não publicado, `windows-teste`. É um instalador de teste: nada nele foi homologado numa área de trabalho do Windows.
