@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GCP-Drive</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>GCP-Drive</h1>
+    <span id="version" class="muted"></span>
+  </div>
+  <div class="speeds" aria-label="Velocidade agora">
+    <div class="stat"><span class="muted">Baixando</span><b id="down">0 B/s</b></div>
+    <div class="stat"><span class="muted">Enviando</span><b id="up">0 B/s</b></div>
+  </div>
+  <div class="actions">
+    <button id="open-root">Abrir a pasta GCP-Drive</button>
+    <button id="add" class="primary">Adicionar conta</button>
+  </div>
+</header>
+<p id="notice" class="notice" hidden></p>
+<main>
+  <section id="accounts" aria-label="Contas"></section>
+  <section class="card" aria-labelledby="settings-title">
+    <h2 id="settings-title">Configurações</h2>
+    <form id="settings">
+      <label>Limite de download (KB/s)<input name="DownKBps" type="number" min="0" step="1"><small>0 deixa sem limite.</small></label>
+      <label>Limite de envio (KB/s)<input name="UpKBps" type="number" min="0" step="1"><small>0 deixa sem limite.</small></label>
+      <label>Cache de leitura (GB)<input name="CacheGB" type="number" min="1" step="1"><small>Blocos baixados enquanto um arquivo é aberto.</small></label>
+      <label class="check"><input name="Premap" type="checkbox"> Mapear a conta inteira ao iniciar<small>As pastas abrem na hora, mesmo as que você nunca visitou.</small></label>
+      <div class="actions"><button class="primary">Salvar</button><span id="saved" class="muted" role="status"></span></div>
+    </form>
+    <p class="muted">Arquivos abertos ficam na própria pasta. Para devolver o espaço, clique no arquivo ou na pasta com o botão direito no Explorador de Arquivos e escolha “Liberar espaço”; “Sempre manter neste dispositivo” guarda uma cópia para usar sem internet.</p>
+  </section>
+</main>
+<dialog id="confirm">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="actions"><button value="no">Cancelar</button><button value="yes" class="danger" id="confirm-yes"></button></div>
+  </form>
+</dialog>
+<script src="app.js"></script>
+</body>
+</html>

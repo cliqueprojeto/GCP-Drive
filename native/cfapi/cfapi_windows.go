@@ -25,6 +25,8 @@ var (
 	procSetInSyncState         = cldapi.NewProc("CfSetInSyncState")
 	procUpdatePlaceholder      = cldapi.NewProc("CfUpdatePlaceholder")
 	procGetPlaceholderInfo     = cldapi.NewProc("CfGetPlaceholderInfo")
+	procHydratePlaceholder     = cldapi.NewProc("CfHydratePlaceholder")
+	procSetPinState            = cldapi.NewProc("CfSetPinState")
 )
 
 // Error is a failed HRESULT.
@@ -501,6 +503,23 @@ func ConvertToPlaceholder(handle windows.Handle, identity []byte, inSync bool) e
 // Dehydrate releases the local content of an in-sync placeholder.
 func Dehydrate(handle windows.Handle) error {
 	res, _, _ := procDehydratePlaceholder.Call(uintptr(handle), 0, ^uintptr(0), 0, 0)
+	return check(res)
+}
+
+// Hydrate downloads the whole content of a placeholder through the provider's own callbacks and returns when it is on disk.
+func Hydrate(handle windows.Handle) error {
+	res, _, _ := procHydratePlaceholder.Call(uintptr(handle), 0, ^uintptr(0), 0, 0)
+	return check(res)
+}
+
+// SetPin does what the Explorer's "always keep on this device" (keep) and "free up space" commands do to
+// the pin state of a file or folder; the content follows through Hydrate and Dehydrate.
+func SetPin(handle windows.Handle, keep bool) error {
+	state := uintptr(2)
+	if keep {
+		state = 1
+	}
+	res, _, _ := procSetPinState.Call(uintptr(handle), state, 0, 0)
 	return check(res)
 }
 

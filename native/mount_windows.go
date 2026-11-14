@@ -24,6 +24,9 @@ var providerID = windows.GUID{Data1: 0x6f2a7c11, Data2: 0x3d5e, Data3: 0x4b8a, D
 // reconcileDelay groups remote changes before they are written to the folder.
 var reconcileDelay = 2 * time.Second
 
+// offlineInCache: files kept on this device hold their content themselves, so the cache is not filled for them.
+const offlineInCache = false
+
 // folderState is a folder of the account whose whole listing is on disk.
 type folderState struct {
 	// Dir is the Drive folder shown there.
@@ -50,6 +53,8 @@ type platform struct {
 	local      map[string]time.Time // folders that changed on disk, and when to look at them
 	superseded map[string][2]int64  // files whose local content went to the Drive as a conflict copy: size and time
 	gone       map[string]time.Time // entries missing from their folder, and since when
+	keeping    map[string]bool      // files being downloaded whole because they are kept on this device
+	slots      chan struct{}        // bounds those downloads
 	readers    map[*cfile]*reader
 	fetches    map[int64][]*fetchJob
 }
@@ -99,6 +104,15 @@ func placeholderOf(e entry) cfapi.Placeholder {
 	return p
 }
 
+// shellID names the account's folder to the Explorer: provider, Windows user and account.
+func (m *Mount) shellID() string {
+	sid := "S-1-0-0"
+	if user, err := windows.GetCurrentProcessToken().GetTokenUser(); err == nil {
+		sid = user.User.Sid.String()
+	}
+	return "GCP-Drive!" + sid + "!" + m.a.ID
+}
+
 func (m *Mount) populatedPath() string { return filepath.Join(dataDir(), "pastas", m.a.ID+".json") }
 
 // attach registers the account's folder as a sync root and starts answering the platform.
@@ -110,12 +124,20 @@ func (m *Mount) attach() error {
 		return err
 	}
 	root := longPath(m.path)
-	reg := cfapi.Root{Path: root, Provider: "GCP-Drive", Version: version, Identity: []byte(m.a.ID), ProviderID: providerID,
-		Hydration: cfapi.HydrationPartial, Population: cfapi.PopulationPartial}
-	if err := cfapi.Register(reg); err != nil {
-		reg.Flags = cfapi.RegisterUpdate
+	// Registered with the Explorer, the folder gets its entry in the navigation pane, state icons and the
+	// commands to keep files on this device or free their space. Storage Sense may free files not used for long.
+	shell := cfapi.RegisterShell(cfapi.ShellRoot{ID: m.shellID(), Path: root, DisplayName: "GCP-Drive – " + m.a.Email, Icon: iconPath(),
+		Version: version, Context: []byte(m.a.ID), Hydration: cfapi.HydrationPartial, HydrationModifier: cfapi.HydrationModifierAutoDehydration})
+	if shell != nil {
+		// Without the Explorer's part the folder still works; only the icons and commands are missing.
+		m.problem("Integrar ao Explorer", m.a.Email, shell)
+		reg := cfapi.Root{Path: root, Provider: "GCP-Drive", Version: version, Identity: []byte(m.a.ID), ProviderID: providerID,
+			Hydration: cfapi.HydrationPartial, Population: cfapi.PopulationPartial}
 		if err := cfapi.Register(reg); err != nil {
-			return errors.New("O Windows não aceitou a pasta desta conta como pasta sob demanda: " + err.Error())
+			reg.Flags = cfapi.RegisterUpdate
+			if err := cfapi.Register(reg); err != nil {
+				return errors.New("O Windows não aceitou a pasta desta conta como pasta sob demanda: " + err.Error())
+			}
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,7 +146,10 @@ func (m *Mount) attach() error {
 	m.plat.root, m.plat.prefix = root, strings.TrimPrefix(root, filepath.VolumeName(root))
 	m.plat.populated, m.plat.dirty = map[string]*folderState{}, map[string]bool{}
 	m.plat.local, m.plat.superseded = map[string]time.Time{}, map[string][2]int64{}
-	m.plat.gone = map[string]time.Time{}
+	m.plat.gone, m.plat.keeping = map[string]time.Time{}, map[string]bool{}
+	if m.plat.slots == nil {
+		m.plat.slots = make(chan struct{}, 2)
+	}
 	m.plat.readers, m.plat.fetches = map[*cfile]*reader{}, map[int64][]*fetchJob{}
 	_ = readJSON(m.populatedPath(), &m.plat.populated)
 	m.plat.mu.Unlock()
@@ -174,7 +199,9 @@ func (m *Mount) detach() {
 
 // forget removes the folder of a disconnected account, unless it holds files that never reached the Drive.
 func (m *Mount) forget() {
-	_ = cfapi.Unregister(m.path)
+	if cfapi.UnregisterShell(m.shellID()) != nil {
+		_ = cfapi.Unregister(m.path)
+	}
 	os.Remove(m.populatedPath())
 	if disposable(m.path) {
 		os.RemoveAll(m.path)

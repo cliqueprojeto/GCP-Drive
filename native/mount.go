@@ -782,7 +782,9 @@ func (m *Mount) start(parent context.Context) error {
 	m.cancel, m.on = cancel, true
 	m.mu.Unlock()
 	go m.syncLoop(ctx)
-	go m.offlineLoop(ctx)
+	if offlineInCache {
+		go m.offlineLoop(ctx)
+	}
 	if !readOnly() {
 		go m.uploader(ctx)
 	}

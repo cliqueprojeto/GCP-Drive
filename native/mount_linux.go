@@ -13,6 +13,9 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
+// offlineInCache: offline copies are kept as blocks of the cache, which is the only place content lives here.
+const offlineInCache = true
+
 // platform is the FUSE mount of one account.
 type platform struct {
 	server   *fuse.Server

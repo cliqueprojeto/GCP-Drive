@@ -24,6 +24,12 @@ import (
 // what is on disk (uploads, renames, moves), then what is missing from it (removals, arrivals), so an
 // entry moved between two folders is never mistaken for a removal.
 
+// File attributes of placeholders: kept on this device, and content not all on disk.
+const (
+	attributePinned             = 0x00080000
+	attributeRecallOnDataAccess = 0x00400000
+)
+
 // scan is one folder in a round.
 type scan struct {
 	rel, path, dir string
@@ -31,6 +37,7 @@ type scan struct {
 	claimed        map[string]bool // names in use on disk
 	present        map[string]bool // items found on disk
 	stray          map[string]bool // shared by the round: items found where the Drive does not have them
+	pinned         bool            // the folder itself is kept on this device
 }
 
 // later asks for another look at a folder once a file there has settled or been closed.
@@ -112,7 +119,9 @@ func (m *Mount) moveFolders(dir, to string) {
 
 // watcher notes the folders in which something was created, written, renamed or removed.
 func (m *Mount) watcher(ctx context.Context, handle windows.Handle) {
-	const mask = windows.FILE_NOTIFY_CHANGE_FILE_NAME | windows.FILE_NOTIFY_CHANGE_DIR_NAME | windows.FILE_NOTIFY_CHANGE_SIZE | windows.FILE_NOTIFY_CHANGE_LAST_WRITE
+	// Attributes change when the Explorer pins a file or frees its space, and when a download completes.
+	const mask = windows.FILE_NOTIFY_CHANGE_FILE_NAME | windows.FILE_NOTIFY_CHANGE_DIR_NAME | windows.FILE_NOTIFY_CHANGE_SIZE |
+		windows.FILE_NOTIFY_CHANGE_LAST_WRITE | windows.FILE_NOTIFY_CHANGE_ATTRIBUTES
 	buf := make([]byte, 64<<10)
 	for ctx.Err() == nil {
 		var n uint32
@@ -251,6 +260,9 @@ func (m *Mount) compare(ctx context.Context, rel string, stray map[string]bool) 
 			m.forgetFolders(rel)
 		}
 		return nil
+	}
+	if info, err := os.Stat(s.path); err == nil && rel != "" {
+		s.pinned = attributes(info)&attributePinned != 0
 	}
 	if s.st == nil && len(onDisk) == 0 {
 		return nil
@@ -401,16 +413,32 @@ func (m *Mount) comparePlaceholder(ctx context.Context, s *scan, d os.DirEntry, 
 		return
 	}
 	m.remember(s, id, name)
+	// "Always keep on this device" is the Explorer's name for an offline copy; the panel counts the selections.
+	keep := attributes(info)&attributePinned != 0
+	m.mu.Lock()
+	listed := m.pins[id]
+	m.mu.Unlock()
+	if selected := keep && !s.pinned; selected != listed {
+		_ = m.setPin(id, selected)
+	}
 	if kind != kindFile || d.IsDir() {
 		return
 	}
 	c := e.Content
 	same := sameContent(info, c)
+	if same && state.InSync && version == c.MD5 {
+		if attributes(info)&attributeRecallOnDataAccess == 0 {
+			// The whole content is in the file itself; the blocks it came through are not needed twice.
+			m.cache.release(c)
+		} else if keep && !m.paused() {
+			m.keep(full, name)
+		}
+		return
+	}
 	var err error
 	switch {
 	case c.Local:
 		m.queue(s, full, info, c.ID, true, name, "")
-	case same && state.InSync && version == c.MD5:
 	case same:
 		// What is here is what the Drive has: an upload finished.
 		err = withHandle(full, func(h windows.Handle) error { return cfapi.SetIdentity(h, identityOf(e), true) })
@@ -770,4 +798,60 @@ func disposable(path string) bool {
 		}
 	}
 	return true
+}
+
+// keep downloads the whole content of a file the user asked to keep on this device.
+func (m *Mount) keep(full, name string) {
+	m.plat.mu.Lock()
+	busy := m.plat.keeping[full]
+	m.plat.keeping[full] = true
+	ctx, slots := m.plat.ctx, m.plat.slots
+	m.plat.mu.Unlock()
+	if busy {
+		return
+	}
+	go func() {
+		defer func() {
+			m.plat.mu.Lock()
+			delete(m.plat.keeping, full)
+			m.plat.mu.Unlock()
+		}()
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		case <-ctx.Done():
+			return
+		}
+		act := m.log("Guardar cópia off-line", name, "Em andamento", "")
+		if err := withHandle(full, cfapi.Hydrate); err != nil {
+			m.update(act, "Falhou", err.Error())
+		} else {
+			m.update(act, "Concluída", "")
+		}
+	}()
+}
+
+// release drops the blocks of a file whose content is kept elsewhere.
+func (c *Cache) release(it *Item) {
+	key := it.ID + "/" + versionKey(it)
+	c.mu.Lock()
+	if f := c.files[key]; f != nil {
+		f.mu.Lock()
+		busy := len(f.inflight) > 0
+		if !busy {
+			f.have = map[int]bool{}
+			delete(c.files, key)
+		}
+		f.mu.Unlock()
+		if busy {
+			c.mu.Unlock()
+			return
+		}
+	}
+	c.mu.Unlock()
+	dir := filepath.Join(c.root, safeID(it.ID), versionKey(it))
+	if _, err := os.Stat(dir); err == nil {
+		c.total.Add(-dirBytes(dir))
+		_ = os.RemoveAll(dir)
+	}
 }

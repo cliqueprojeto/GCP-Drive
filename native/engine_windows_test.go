@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -21,6 +22,8 @@ import (
 	"gcpdrive/cfapi"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // Windows does not ask a provider to fill folders for the provider's own process, so the test reads
@@ -362,6 +365,89 @@ func TestEngineWindows(t *testing.T) {
 	if f, _ := remote("relatório final.pdf"); f == nil || f.ID != "F1" {
 		t.Fatal("the remote rename was undone")
 	}
+
+	// The folder is registered with the Explorer, not only with the Cloud Files platform.
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\`+m.shellID(), registry.QUERY_VALUE)
+	if err != nil {
+		t.Fatalf("sync root is not registered with the Explorer: %v", err)
+	}
+	name, _, _ := key.GetStringValue("DisplayNameResource")
+	key.Close()
+	if !strings.Contains(name, "teste@example.com") {
+		t.Fatalf("name shown by the Explorer: %q", name)
+	}
+
+	// "Always keep on this device" downloads the whole file and counts as an offline selection;
+	// once the content is in the file itself the cache gives up its copy. "Free up space" undoes it.
+	kept := bytes.Repeat([]byte("manter neste dispositivo "), 3*chunkSize/25)
+	fake.mu.Lock()
+	fake.add("F4", "manter.bin", "D1", kept, "")
+	fake.mu.Unlock()
+	feed("F4", func(*apiFile) {})
+	keptPath := filepath.Join(m.plat.root, nameMy, "Projetos", "manter.bin")
+	waitFor(t, "file to keep", func() bool { _, err := os.Stat(keptPath); return err == nil })
+	before := media()
+	pin := func(keep bool) {
+		t.Helper()
+		if err := withHandle(keptPath, func(h windows.Handle) error { return cfapi.SetPin(h, keep) }); err != nil {
+			t.Fatalf("pin %v: %v", keep, err)
+		}
+	}
+	whole := func() bool {
+		info, err := os.Stat(keptPath)
+		return err == nil && attributes(info)&attributeRecallOnDataAccess == 0
+	}
+	selected := func() bool { m.mu.Lock(); defer m.mu.Unlock(); return m.pins["F4"] }
+	pin(true)
+	waitFor(t, "kept file to download", whole)
+	waitFor(t, "offline selection", selected)
+	if media() == before {
+		t.Fatal("keeping the file did not download it")
+	}
+	waitFor(t, "cache to give up its copy", func() bool { return dirBytes(filepath.Join(m.cache.root, "F4")) == 0 })
+	pin(false)
+	if err := withHandle(keptPath, cfapi.Dehydrate); err != nil {
+		t.Fatalf("free up space: %v", err)
+	}
+	waitFor(t, "selection to end", func() bool { return !selected() && !whole() })
+	if data := read("read", keptPath); !bytes.Equal(data, kept) {
+		t.Fatal("content differs after freeing its space")
+	}
+
+	// The panel answers only to who holds its token, and the notification icon comes and goes without harm.
+	ctx, cancel := context.WithCancel(context.Background())
+	daemon := &Daemon{set: set, sched: m.sched, mounts: map[string]*Mount{account.ID: m}, ctx: ctx, stop: cancel}
+	closeDesktop := daemon.startDesktop()
+	desk.mu.Lock()
+	address := desk.panel
+	desk.mu.Unlock()
+	base, token, _ := strings.Cut(address, "/#")
+	ask := func(token string) (int, string) {
+		req, _ := http.NewRequest("POST", base+"/api/call", strings.NewReader(`{"Args":["status"]}`))
+		req.Header.Set("X-GCP-Drive-Token", token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(body)
+	}
+	if code, body := ask(token); code != 200 || !strings.Contains(body, "teste@example.com") || !strings.Contains(body, `"Err":""`) {
+		t.Fatalf("panel status: %d %s", code, body)
+	}
+	if code, _ := ask("outro"); code != 403 {
+		t.Fatalf("panel answered without its token: %d", code)
+	}
+	page, err := http.Get(base + "/")
+	if err != nil || page.StatusCode != 200 {
+		t.Fatalf("panel page: %v", err)
+	}
+	page.Body.Close()
+	time.Sleep(time.Second)
+	closeDesktop()
+	cancel()
+
 	if n, failed := m.unsent(); n != 0 || failed != "" {
 		t.Fatalf("unsent after test: %d %s", n, failed)
 	}

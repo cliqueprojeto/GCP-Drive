@@ -3,10 +3,14 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -92,8 +96,45 @@ func lockFile(path string) (unlock func(), held bool, err error) {
 	return func() { lock.Close() }, false, nil
 }
 
+//go:embed files/icons/gcp-drive.ico
+var appIcon []byte
+
+// iconPath is the application's icon as a file, for the Explorer and the notification area.
+func iconPath() string {
+	path := filepath.Join(localDir(), "gcp-drive.ico")
+	if info, err := os.Stat(path); err != nil || info.Size() != int64(len(appIcon)) {
+		_ = writePrivate(path, appIcon)
+	}
+	return path
+}
+
+// launchPanel shows the panel of the running service, starting the service first when needed.
 func launchPanel() error {
-	return errors.New("O painel do GCP-Drive para Windows ainda não faz parte desta compilação.")
+	if _, err := call([]string{"panel"}); err == nil {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		cmd := exec.Command(exe, "daemon")
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP}
+		err = cmd.Start()
+	}
+	for i := 0; err == nil && i < 100; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if _, err := call([]string{"panel"}); err == nil {
+			return nil
+		}
+	}
+	message := "O serviço do GCP-Drive não iniciou."
+	notify(message)
+	return errors.New(message)
+}
+
+// notify tells the user something when there is no window or terminal to show it in.
+func notify(message string) {
+	text, _ := windows.UTF16PtrFromString(message)
+	title, _ := windows.UTF16PtrFromString("GCP-Drive")
+	_, _ = windows.MessageBox(0, text, title, windows.MB_OK|windows.MB_ICONWARNING)
 }
 
 // diskFree reports the bytes available to the user on the disk that holds path.

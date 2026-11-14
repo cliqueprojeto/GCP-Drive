@@ -72,6 +72,13 @@ func launchPanel() error {
 	return nil
 }
 
+// The panel is a program of its own here; the service has nothing to show on the desktop.
+func (d *Daemon) startDesktop() func() { return func() {} }
+
+func (d *Daemon) showPanel() error {
+	return errors.New("Abra o painel pelo menu de aplicativos.")
+}
+
 // diskFree reports the bytes available to the user on the disk that holds path.
 func diskFree(path string) (int64, bool) {
 	var st syscall.Statfs_t

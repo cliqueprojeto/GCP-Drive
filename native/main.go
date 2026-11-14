@@ -309,6 +309,8 @@ func (d *Daemon) handle(ctx context.Context, args []string) (any, error) {
 	case "quit":
 		d.stop()
 		return nil, nil
+	case "panel":
+		return nil, d.showPanel()
 	case "context":
 		return d.contextAction(ctx, args[1:])
 	case "settings":
@@ -480,6 +482,7 @@ func runDaemon() error {
 	}
 	_ = os.Chmod(socketPath(), 0o600)
 	go d.serve(listener)
+	defer d.startDesktop()()
 	d.reload()
 	go func() {
 		var lastDown, lastUp int64
