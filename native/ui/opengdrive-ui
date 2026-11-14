@@ -480,6 +480,13 @@ class Dashboard(Gtk.Application):
             old = self.rows
             old_error = self.status_error
             self.status_error = err
+            if err and self.background_started and self.daemon is not None and self.daemon.poll() is not None:
+                # The engine ended (an update, for example): start it again.
+                self.daemon = None
+                try:
+                    self.start_daemon()
+                except OSError as error:
+                    startup_error("Não foi possível reiniciar a montagem das unidades.", error)
             if not err:
                 self.rows = json.loads(out)
                 if not self.current():

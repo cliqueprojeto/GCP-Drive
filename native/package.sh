@@ -3,7 +3,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^const version = "\(.*\)"$/\1/p' "$here/account.go")"
-release=1
+release=2
 oauth="${GCP_DRIVE_OAUTH_FILE:-/usr/lib/opengdrive/google-oauth.json}"
 [ -r "$oauth" ] || { echo "Cadastro OAuth do aplicativo não encontrado: $oauth" >&2; exit 1; }
 out="$here/../.local/installers/$version"

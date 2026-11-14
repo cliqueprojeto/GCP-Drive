@@ -102,11 +102,13 @@ func (d *Daemon) status() any {
 		m.meta.mu.RLock()
 		problem := m.meta.problem
 		m.meta.mu.RUnlock()
+		m.mu.Lock()
 		if m.mountErr != "" {
 			problem = m.mountErr
 		}
+		m.mu.Unlock()
 		r := row{ID: m.a.ID, Email: m.a.Email, Name: m.a.Name, Path: m.path, Problem: problem, FileProblem: failed,
-			Mounted: m.server != nil, Paused: m.paused(), Items: items, Mapped: complete, Pending: pending,
+			Mounted: m.isMounted(), Paused: m.paused(), Items: items, Mapped: complete, Pending: pending,
 			MirrorStatus: map[string]any{"Running": false, "Last": "0001-01-01T00:00:00Z", "Problem": "", "Conflicts": nil},
 			Downloads:    m.cache.active.Load(), CacheBytes: m.cache.total.Load(), CacheLimit: int64(d.set.CacheGB) << 30, Down: d.down, Up: d.up}
 		m.mu.Lock()
@@ -482,7 +484,22 @@ func runDaemon() error {
 	d.reload()
 	go func() {
 		var lastDown, lastUp int64
-		for range time.Tick(time.Second) {
+		for tick := 1; ; tick++ {
+			time.Sleep(time.Second)
+			// A folder still held by a previous service is tried again until it is free.
+			if tick%10 == 0 {
+				for _, m := range d.list() {
+					if !m.isMounted() {
+						err := m.start(d.ctx)
+						m.mu.Lock()
+						m.mountErr = ""
+						if err != nil {
+							m.mountErr = err.Error()
+						}
+						m.mu.Unlock()
+					}
+				}
+			}
 			down, up := d.sched.Down.Load(), d.sched.Up.Load()
 			d.mu.Lock()
 			d.down, d.up = down-lastDown, up-lastUp

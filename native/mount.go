@@ -743,7 +743,7 @@ func (m *Mount) start(parent context.Context) error {
 	if mounted(m.path) {
 		// A mount left behind by a process that ended without unmounting.
 		if _, err := os.Stat(m.path); err == nil {
-			return errors.New("A pasta desta conta já está montada por outro processo. Saia e entre novamente na sessão.")
+			return errors.New("A pasta desta conta ainda está em uso pela versão anterior. O GCP-Drive tentará de novo em instantes.")
 		}
 		_ = exec.Command("fusermount3", "-u", "-z", m.path).Run()
 	}
@@ -763,9 +763,10 @@ func (m *Mount) start(parent context.Context) error {
 	if err != nil {
 		return errors.New("Não foi possível montar a unidade. Verifique se o FUSE 3 está instalado.")
 	}
-	m.server = server
 	ctx, cancel := context.WithCancel(parent)
-	m.cancel = cancel
+	m.mu.Lock()
+	m.server, m.cancel = server, cancel
+	m.mu.Unlock()
 	go m.syncLoop(ctx)
 	go m.offlineLoop(ctx)
 	if !readOnly() {
@@ -774,16 +775,25 @@ func (m *Mount) start(parent context.Context) error {
 	return nil
 }
 
+func (m *Mount) isMounted() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.server != nil
+}
+
 func (m *Mount) stop() {
-	if m.cancel != nil {
-		m.cancel()
+	m.mu.Lock()
+	server, cancel := m.server, m.cancel
+	m.server, m.cancel = nil, nil
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 	m.meta.save()
-	if m.server != nil {
-		if err := m.server.Unmount(); err != nil {
+	if server != nil {
+		if err := server.Unmount(); err != nil {
 			_ = exec.Command("fusermount3", "-u", "-z", m.path).Run()
 		}
-		m.server = nil
 	}
 }
 
