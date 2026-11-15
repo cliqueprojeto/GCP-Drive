@@ -83,8 +83,9 @@ func registerShellMenu() error {
 			"Icon":             icon,
 			"SubCommands":      "",
 			"MultiSelectModel": "Single",
-			// Only items whose path starts with the GCP-Drive folder show the submenu.
-			"AppliesTo": `System.ItemPathDisplay:~<"` + root + `"`,
+			// Only items whose path starts with the GCP-Drive folder show the submenu. The parsing path is
+			// the real one; the display path translates folder names ("C:\Usuários" for "C:\Users").
+			"AppliesTo": `System.ParsingPath:~<"` + root + `"`,
 		} {
 			if err = key.SetStringValue(name, value); err != nil {
 				break
