@@ -255,3 +255,13 @@ Não executado: abrir o menu com o botão direito no Explorador e ver o submenu 
 Observado no BigLinux do autor, depois de instalar `gcp-drive-0.5.1-1-x86_64.pkg.tar.zst` sobre a 0.5.0: o pacote instalado e `gcp-drive version` informavam 0.5.1, mas o serviço em execução era o processo iniciado em 13 de novembro, com o executável antigo já substituído no disco; o painel, que lê a versão do serviço, mostrava 0.5.0. A instalação não reinicia o serviço do usuário.
 
 Correção: ao abrir o painel, a versão do serviço é comparada com a do executável instalado; se diferem, o painel oferece reiniciar o serviço, avisando para fechar antes os arquivos abertos. Executado: apenas a compilação do script do painel (`python3 -m py_compile`). Não executado: a janela de aviso e o reinício numa sessão gráfica, pois reiniciaria o serviço das contas reais do autor.
+
+## Versão 0.5.2: reinício depois de atualizar no Linux (15 de novembro de 2026)
+
+Revisão da correção acima: o processo do painel também continua com o código antigo depois de uma atualização, então só reiniciar o serviço não bastava. Na 0.5.2, ao aceitar o reinício, o serviço antigo é parado e o painel é reaberto a partir dos arquivos instalados, o que inicia o serviço novo. Os pacotes avisam, ao serem atualizados, que é preciso concluir a atualização pelo painel ou saindo da sessão. Quem vem da 0.5.0 ou da 0.5.1 ainda precisa sair da sessão uma vez, porque o painel dessas versões não tem a verificação.
+
+Executado no BigLinux: `go vet ./...` e `GOOS=windows go vet ./...`; `python3 -m py_compile` do painel; `native/package.sh` gerou os três pacotes 0.5.2-1; os avisos de atualização foram lidos dentro de cada um (`.INSTALL` do Arch, `postinst` do Debian, `%post` do RPM) e o `postinst` foi executado fora de um gerenciador de pacotes: imprime o aviso numa atualização e nada numa instalação nova, saindo com código 0 nos dois casos.
+
+Executado no GitHub Actions sobre o commit `6b9d26e`: `Native engine (Linux)` (execução 43772596187: testes FUSE contra o Drive simulado, pacotes gerados num contêiner Arch Linux e o pacote Arch instalado ali) e `Native engine (Windows)` (execução 43772598949: testes do motor e instalar, atualizar e desinstalar), ambos aprovados, com os arquivos anexados à versão `v0.5.2`. Os arquivos baixados da versão conferem com as somas SHA-256 e não contêm cadastro do Google.
+
+Não executado: a janela que oferece o reinício e a reabertura do painel numa sessão gráfica (reiniciaria o serviço das contas reais do autor); os pacotes `.deb` e `.rpm` instalados; o aviso exibido por pacman, apt ou dnf numa atualização real.
