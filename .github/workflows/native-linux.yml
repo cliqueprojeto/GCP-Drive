@@ -1,0 +1,89 @@
+name: Native engine (Linux)
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Anexar os pacotes a este rascunho de versão já criado (ex. v0.5.1)
+        type: string
+        default: ''
+permissions:
+  # Writing is used only to stage the packages on a release draft, when asked.
+  contents: write
+jobs:
+  test:
+    name: FUSE engine against a simulated Drive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: FUSE 3 on the disposable runner
+        run: sudo apt-get update && sudo apt-get install -y fuse3
+      - run: go vet ./...
+      - run: GOOS=windows go vet ./...
+      # A temporary mount served from memory. It does not establish behaviour with a Google account or in a file manager.
+      - run: go test -race -count=1 -v ./...
+
+  package:
+    name: Packages (Arch, Debian, Fedora)
+    needs: test
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    timeout-minutes: 25
+    steps:
+      - name: Disposable Arch build environment
+        run: pacman -Syu --noconfirm --needed git go rpm-tools cmake extra-cmake-modules qt6-base kio github-cli python python-gobject
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the packages as an unprivileged user
+        shell: bash
+        run: |
+          set -euo pipefail
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env GCP_DRIVE_DOLPHIN=required GOTOOLCHAIN=auto bash -c 'cd "$1/native" && ./package.sh' _ "$GITHUB_WORKSPACE"
+      - name: Install and inspect the Arch package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$(ls -d "$GITHUB_WORKSPACE"/.local/installers/*/ | head -1)"
+          pacman -U --noconfirm "$dir"/gcp-drive-*-x86_64.pkg.tar.zst
+          /usr/bin/gcp-drive version
+          test -L /usr/lib/qt6/plugins/kf6/overlayicon/gcpdriveoverlay.so
+          ldd /usr/lib/opengdrive/gcpdriveoverlay.so | tee ldd-report.txt
+          if grep -q 'not found' ldd-report.txt; then exit 1; fi
+          for state in cloud local offline sync; do test -f /usr/share/icons/hicolor/scalable/apps/gcp-drive-emblem-$state.svg; done
+          python -c "import ast,sys; ast.parse(open('/usr/share/nautilus-python/extensions/gcp-drive.py').read())"
+          rpm -qlp "$dir"/gcp-drive-*.x86_64.rpm | grep -q '/usr/lib64/qt6/plugins/kf6/overlayicon/gcpdriveoverlay.so'
+          bsdtar -xOf "$dir"/gcp-drive_*_amd64.deb data.tar.xz | bsdtar -tf - | grep -q 'x86_64-linux-gnu/qt6/plugins/kf6/overlayicon/gcpdriveoverlay.so'
+          cat "$dir/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: gcp-drive-linux-packages
+          path: .local/installers/*/
+          retention-days: 14
+          if-no-files-found: error
+      # The release draft is created, checked and published by hand; this only stages the files on it.
+      - name: Attach the packages to the release draft
+        if: ${{ inputs.release_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          dir="$(ls -d "$GITHUB_WORKSPACE"/.local/installers/*/ | head -1)"
+          cp "$dir/SHA256SUMS.txt" "$dir/SHA256SUMS-linux.txt"
+          gh release upload "$TAG" "$dir"/*.pkg.tar.zst "$dir"/*.deb "$dir"/*.rpm "$dir/SHA256SUMS-linux.txt" --clobber --repo "$GITHUB_REPOSITORY"

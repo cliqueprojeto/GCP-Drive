@@ -75,9 +75,17 @@ func launchPanel() error {
 // The panel is a program of its own here; the service has nothing to show on the desktop.
 func (d *Daemon) startDesktop() func() { return func() {} }
 
-func (d *Daemon) showPanel() error {
+func (d *Daemon) showPanel(string) error {
 	return errors.New("Abra o painel pelo menu de aplicativos.")
 }
+
+// autostartState: the panel manages the session's autostart entry itself here.
+func autostartState([]string) (any, error) {
+	return nil, errors.New("Use as Preferências do painel.")
+}
+
+// desktopNotify: the panel and the file manager actions show their own messages here.
+func desktopNotify(string, string) {}
 
 // localCommand runs commands that do not go through the service; packages handle setup here.
 func localCommand([]string) (bool, error) { return false, nil }

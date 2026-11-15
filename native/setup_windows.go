@@ -11,6 +11,12 @@ import (
 
 // localCommand runs commands that do not go through the service.
 func localCommand(args []string) (bool, error) {
+	if args[0] == "context-ui" {
+		if len(args) < 3 {
+			return true, errors.New("Ação incompleta.")
+		}
+		return true, contextUI(args[1], args[2])
+	}
 	if args[0] != "uninstall" {
 		return false, nil
 	}
@@ -37,6 +43,7 @@ func uninstall(withAccounts bool) error {
 			}
 		}
 	}
+	unregisterShellMenu()
 	set := loadSettings()
 	list, _ := loadAccounts()
 	for _, a := range list {

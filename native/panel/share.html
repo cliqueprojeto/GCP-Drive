@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compartilhar item</title>
+<link rel="icon" href="gcp-drive.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="share">
+  <h1 id="title">Compartilhar</h1>
+  <form id="invite" class="invite">
+    <input id="email" type="email" placeholder="Adicionar por e-mail" aria-label="Adicionar por e-mail" disabled>
+    <select id="grantee" class="field" aria-label="Tipo" disabled><option value="user">Pessoa</option><option value="group">Grupo</option></select>
+    <select id="role" class="field" aria-label="Permissão" disabled><option value="reader">Leitor</option><option value="commenter">Comentador</option><option value="writer">Editor</option></select>
+    <button id="send" class="primary small" disabled>Enviar</button>
+  </form>
+  <p id="feedback" class="muted"></p>
+  <h2>Pessoas com acesso</h2>
+  <div id="people"><p class="muted">Carregando permissões…</p></div>
+  <hr>
+  <h2>Acesso geral</h2>
+  <div class="general"><span id="general-icon"></span><span id="general">Carregando…</span></div>
+  <p class="muted">Quem você adicionar recebe um e-mail do Google com o convite e passa a ver o item com a permissão escolhida; editores também podem alterá-lo e, conforme a configuração do item, compartilhá-lo.</p>
+  <footer>
+    <button id="copy-link" class="pill small"><span data-icon="link"></span>Copiar link</button>
+    <span class="spacer"></span>
+    <button id="manage" class="link">Gerenciar no Drive</button>
+    <button id="done" class="primary small">Concluído</button>
+  </footer>
+</div>
+<p id="notice" class="notice" role="status" hidden></p>
+<script src="common.js"></script>
+<script src="share.js"></script>
+</body>
+</html>

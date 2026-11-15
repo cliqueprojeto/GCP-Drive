@@ -4,10 +4,12 @@ package main
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -88,6 +90,26 @@ var (
 	_ [48]byte  = [unsafe.Sizeof(message{})]byte{}
 )
 
+// desktopNotify shows a short message from the icon next to the clock.
+func desktopNotify(title, text string) {
+	desk.mu.Lock()
+	window := desk.window
+	desk.mu.Unlock()
+	if window == 0 {
+		return
+	}
+	const nimModify, nifInfo, niifInfo = 1, 0x10, 1
+	data := notifyIcon{Window: window, ID: trayIconID, Flags: nifInfo, InfoFlags: niifInfo}
+	data.Size = uint32(unsafe.Sizeof(data))
+	fill := func(dst []uint16, text string) {
+		n := copy(dst[:len(dst)-1], windows.StringToUTF16(text))
+		dst[n] = 0
+	}
+	fill(data.InfoTitle[:], title)
+	fill(data.Info[:], text)
+	procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&data)))
+}
+
 const (
 	wmDestroy    = 0x0002
 	wmClose      = 0x0010
@@ -118,6 +140,13 @@ func (d *Daemon) startDesktop() func() {
 	desk.panel = address
 	desk.mu.Unlock()
 	go d.tray()
+	if err := registerShellMenu(); err != nil {
+		// The folders work without the submenu; the activity list tells why it is missing.
+		for _, m := range d.list() {
+			m.log("Menu do Explorador", "GCP-Drive", "Falhou", err.Error())
+			break
+		}
+	}
 	return func() {
 		stop()
 		desk.mu.Lock()
@@ -129,14 +158,24 @@ func (d *Daemon) startDesktop() func() {
 	}
 }
 
-// showPanel opens the panel in a window of its own. Microsoft Edge, part of Windows, draws it without
-// tabs or address bar and with a profile of its own; without Edge the default browser opens it.
-func (d *Daemon) showPanel() error {
+// showPanel opens the panel in a window of its own; with an item, it opens the sharing window of that
+// item. Microsoft Edge, part of Windows, draws it without tabs or address bar and with a profile of its
+// own; without Edge the default browser opens it.
+func (d *Daemon) showPanel(item string) error {
 	desk.mu.Lock()
 	address := desk.panel
 	desk.mu.Unlock()
 	if address == "" {
 		return errors.New("O painel do GCP-Drive não está disponível.")
+	}
+	size := "--window-size=1080,760"
+	if item != "" {
+		if _, _, _, err := d.locate(d.ctx, item); err != nil {
+			return err
+		}
+		// The path travels after the #, with the token: the window never sends it to any server.
+		address = strings.Replace(address, "/#", "/share.html#", 1) + "|" + url.PathEscape(item)
+		size = "--window-size=640,660"
 	}
 	for _, base := range []string{os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
 		edge := filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe")
@@ -144,7 +183,7 @@ func (d *Daemon) showPanel() error {
 			continue
 		}
 		if _, err := os.Stat(edge); err == nil {
-			cmd := exec.Command(edge, "--app="+address, "--window-size=1060,780", "--no-first-run", "--no-default-browser-check",
+			cmd := exec.Command(edge, "--app="+address, size, "--no-first-run", "--no-default-browser-check",
 				"--user-data-dir="+filepath.Join(localDir(), "painel"))
 			if cmd.Start() == nil {
 				go cmd.Wait()
@@ -200,7 +239,7 @@ func (d *Daemon) tray() {
 		chosen, _, _ := procTrackPopupMenu.Call(popup, returnCommand|rightButton, uintptr(at.X), uintptr(at.Y), 0, window, 0)
 		switch chosen {
 		case cmdPanel:
-			go d.showPanel()
+			go d.showPanel("")
 		case cmdFolder:
 			go openExternal(mountRoot())
 		case cmdQuit:
@@ -210,7 +249,7 @@ func (d *Daemon) tray() {
 	proc := windows.NewCallback(func(window, msg, wparam, lparam uintptr) uintptr {
 		switch {
 		case msg == wmTrayEvent && lparam&0xFFFF == wmLeftUp:
-			go d.showPanel()
+			go d.showPanel("")
 		case msg == wmTrayEvent && lparam&0xFFFF == wmRightUp:
 			menu(window)
 		case msg == wmTrayRetry || (taskbarCreated != 0 && msg == taskbarCreated):

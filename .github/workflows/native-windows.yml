@@ -6,6 +6,10 @@ on:
         description: Anexar o instalador a um rascunho de versão não publicado
         type: boolean
         default: false
+      release_tag:
+        description: Anexar o instalador a este rascunho de versão já criado (ex. v0.5.1)
+        type: string
+        default: ''
 permissions:
   # Writing is used only to attach the installer to a draft release, when asked.
   contents: write
@@ -67,4 +71,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
           gh release upload windows-teste $file --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      # The release draft is created, checked and published by hand; this only stages the file on it.
+      - name: Attach the installer to the release draft
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          if ((gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft --jq .isDraft) -ne 'true') { throw 'A versão precisa ser um rascunho.' }
+          gh release upload $env:TAG (Get-ChildItem windows\build\GCP-Drive-*-instalador.exe).FullName --clobber --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { exit 1 }

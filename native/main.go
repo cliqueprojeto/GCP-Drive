@@ -310,9 +310,27 @@ func (d *Daemon) handle(ctx context.Context, args []string) (any, error) {
 		d.stop()
 		return nil, nil
 	case "panel":
-		return nil, d.showPanel()
+		item := ""
+		if len(args) > 1 {
+			item = args[1]
+		}
+		return nil, d.showPanel(item)
+	case "autostart":
+		return autostartState(args[1:])
 	case "context":
 		return d.contextAction(ctx, args[1:])
+	case "states":
+		if len(args) < 2 {
+			return nil, errors.New("Informe a pasta.")
+		}
+		return d.states(ctx, args[1]), nil
+	case "notify":
+		// A short message next to the clock, for actions started from the file manager.
+		if len(args) < 3 {
+			return nil, errors.New("Informe o título e o texto.")
+		}
+		desktopNotify(args[1], args[2])
+		return nil, nil
 	case "settings":
 		if len(args) > 1 {
 			var in struct {

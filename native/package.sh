@@ -3,7 +3,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 version="$(sed -n 's/^const version = "\(.*\)"$/\1/p' "$here/account.go")"
-release=3
+release=1
 # The packages carry no registration with Google: each person hands their own to the panel
 # (docs/CADASTRO-GOOGLE.md). GCP_DRIVE_OAUTH_FILE embeds one, for private builds only.
 oauth="${GCP_DRIVE_OAUTH_FILE:-}"
@@ -26,6 +26,18 @@ for f in opengdrive-ui drive_places.py style.css support-pix.png support-stripe.
 done
 [ -z "$oauth" ] || install -Dm644 "$oauth" "$stage/usr/lib/opengdrive/google-oauth.json"
 for f in "$here"/files/icons/*.svg; do install -Dm644 "$f" "$stage/usr/share/icons/hicolor/scalable/apps/$(basename "$f")"; done
+# Dolphin's status marks: a KDE Frameworks 6 plugin, built when its development files are present.
+# GCP_DRIVE_DOLPHIN=required makes a missing plugin an error (release builds).
+plugin=""
+if command -v cmake >/dev/null && cmake -S "$here/dolphin" -B "$work/dolphin" -DCMAKE_BUILD_TYPE=Release >"$work/dolphin.log" 2>&1 \
+   && cmake --build "$work/dolphin" >>"$work/dolphin.log" 2>&1; then
+  install -Dm644 "$work/dolphin/gcpdriveoverlay.so" "$stage/usr/lib/opengdrive/gcpdriveoverlay.so"
+  plugin=1
+elif [ "${GCP_DRIVE_DOLPHIN:-}" = required ]; then
+  cat "$work/dolphin.log" >&2; echo "O plugin do Dolphin não compilou." >&2; exit 1
+else
+  echo "Aviso: plugin do Dolphin não compilado (faltam cmake, Qt 6 ou KIO 6); os pacotes saem sem as marcas no Dolphin." >&2
+fi
 for f in "$here"/files/servicemenus/*.desktop; do install -Dm644 "$f" "$stage/usr/share/kio/servicemenus/$(basename "$f")"; done
 install -Dm644 "$here/../LICENSE" "$stage/usr/share/licenses/gcp-drive/LICENSE"
 for f in "$here"/files/licenses/*.txt; do install -Dm644 "$f" "$stage/usr/share/licenses/gcp-drive/$(basename "$f")"; done
@@ -36,6 +48,19 @@ install -Dm644 "$here/files/opengdrive.desktop" "$stage/etc/xdg/autostart/opengd
 install -Dm644 "$here/files/gcp-drive.menu" "$stage/etc/xdg/menus/applications-merged/gcp-drive.menu"
 
 summary="Google Drive no Linux com streaming, cópias off-line e várias contas."
+
+# Each distribution looks for Qt plugins in its own directory; the plugin is linked from there.
+stage_for() {
+  local dir="$work/stage-$1"
+  cp -a "$stage" "$dir"
+  if [ -n "$plugin" ]; then
+    install -d "$dir$2"
+    ln -s /usr/lib/opengdrive/gcpdriveoverlay.so "$dir$2/gcpdriveoverlay.so"
+  fi
+}
+stage_for arch /usr/lib/qt6/plugins/kf6/overlayicon
+stage_for deb /usr/lib/x86_64-linux-gnu/qt6/plugins/kf6/overlayicon
+stage_for rpm /usr/lib64/qt6/plugins/kf6/overlayicon
 
 # Arch, Manjaro and BigLinux
 mkdir -p "$work/arch"
@@ -48,18 +73,18 @@ arch=('x86_64')
 url="https://github.com/cliqueprojeto/GCP-Drive"
 license=('GPL-3.0-only')
 depends=('fuse3' 'python' 'python-gobject' 'gtk3' 'libayatana-appindicator' 'xdg-utils' 'wl-clipboard' 'xclip' 'ca-certificates' 'hicolor-icon-theme')
-optdepends=('kde-cli-tools: resolver pastas recentes e resultados de busca do Dolphin' 'python-nautilus: ações no Nautilus' 'nemo-python: ações no Nemo')
+optdepends=('kio: marcas de estado nas pastas do Dolphin' 'kde-cli-tools: resolver pastas recentes e resultados de busca do Dolphin' 'python-nautilus: ações no Nautilus' 'nemo-python: ações no Nemo')
 conflicts=('opengdrive' 'gcp-drive-bin')
 replaces=('opengdrive' 'gcp-drive-bin')
 options=('!strip' '!debug')
-package() { cp -a "$stage/." "\$pkgdir/"; }
+package() { cp -a "$work/stage-arch/." "\$pkgdir/"; }
 PKG
 (cd "$work/arch" && PKGDEST="$out" PKGEXT=.pkg.tar.zst makepkg --nodeps --force --noconfirm >/dev/null)
 
 # Debian and Ubuntu
 deb="$work/deb"
 mkdir -p "$deb/control"
-size="$(du -sk "$stage" | cut -f1)"
+size="$(du -sk "$work/stage-deb" | cut -f1)"
 cat > "$deb/control/control" <<CTL
 Package: gcp-drive
 Version: $version-$release
@@ -77,10 +102,10 @@ Description: $summary
  Monta cada conta do Google Drive como uma pasta do computador. Os arquivos
  são baixados sob demanda e ficam em cache local para abrir na hora.
 CTL
-(cd "$stage" && find etc -type f | sed 's|^|/|') > "$deb/control/conffiles"
-(cd "$stage" && find usr etc -type f -exec md5sum {} + ) > "$deb/control/md5sums"
+(cd "$work/stage-deb" && find etc -type f | sed 's|^|/|') > "$deb/control/conffiles"
+(cd "$work/stage-deb" && find usr etc -type f -exec md5sum {} + ) > "$deb/control/md5sums"
 echo 2.0 > "$deb/debian-binary"
-fakeroot sh -c "cd '$deb/control' && tar --owner=0 --group=0 -cJf ../control.tar.xz ./control ./conffiles ./md5sums && cd '$stage' && tar --owner=0 --group=0 -cJf '$deb/data.tar.xz' ./usr ./etc"
+fakeroot sh -c "cd '$deb/control' && tar --owner=0 --group=0 -cJf ../control.tar.xz ./control ./conffiles ./md5sums && cd '$work/stage-deb' && tar --owner=0 --group=0 -cJf '$deb/data.tar.xz' ./usr ./etc"
 rm -f "$out/gcp-drive_${version}-${release}_amd64.deb"
 (cd "$deb" && ar rc "$out/gcp-drive_${version}-${release}_amd64.deb" debian-binary control.tar.xz data.tar.xz)
 
@@ -102,11 +127,11 @@ Obsoletes: opengdrive < $version
 Monta cada conta do Google Drive como uma pasta do computador. Os arquivos
 são baixados sob demanda e ficam em cache local para abrir na hora.
 %install
-cp -a "$stage/." "%{buildroot}/"
+cp -a "$work/stage-rpm/." "%{buildroot}/"
 %files
 SPEC
-(cd "$stage" && find usr -type f | sed 's|^|"/|; s|$|"|')
-(cd "$stage" && find etc -type f | sed 's|^|%config(noreplace) "/|; s|$|"|')
+(cd "$work/stage-rpm" && find usr \( -type f -o -type l \) | sed 's|^|"/|; s|$|"|')
+(cd "$work/stage-rpm" && find etc -type f | sed 's|^|%config(noreplace) "/|; s|$|"|')
 } > "$work/rpm/SPECS/gcp-drive.spec"
 rpmbuild -bb --quiet --define "_topdir $work/rpm" --define "_rpmdir $work/rpm/out" --define "_build_id_links none" --define "debug_package %{nil}" "$work/rpm/SPECS/gcp-drive.spec"
 cp "$work"/rpm/out/x86_64/*.rpm "$out/gcp-drive-${version}-${release}.x86_64.rpm"

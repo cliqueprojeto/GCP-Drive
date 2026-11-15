@@ -20,7 +20,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const version = "0.5.0"
+const version = "0.5.1"
 
 var googleEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",

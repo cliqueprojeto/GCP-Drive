@@ -524,6 +524,20 @@ func SetPin(handle windows.Handle, keep bool) error {
 	return check(res)
 }
 
+// SetPinTree is SetPin that, for a folder, also applies to everything inside it, as the Explorer does.
+func SetPinTree(handle windows.Handle, keep, recurse bool) error {
+	if !recurse {
+		return SetPin(handle, keep)
+	}
+	state := uintptr(2)
+	if keep {
+		state = 1
+	}
+	const recurseFlag = 0x1
+	res, _, _ := procSetPinState.Call(uintptr(handle), state, recurseFlag, 0)
+	return check(res)
+}
+
 // Revert turns a placeholder whose content is on disk back into an ordinary file or folder.
 func Revert(handle windows.Handle) error {
 	res, _, _ := procRevertPlaceholder.Call(uintptr(handle), 0, 0)

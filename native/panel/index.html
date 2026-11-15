@@ -4,54 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GCP-Drive</title>
+<link rel="icon" href="gcp-drive.svg">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header>
-  <div class="brand">
-    <h1>GCP-Drive</h1>
-    <span id="version" class="muted"></span>
-  </div>
-  <div class="speeds" aria-label="Velocidade agora">
-    <div class="stat"><span class="muted">Baixando</span><b id="down">0 B/s</b></div>
-    <div class="stat"><span class="muted">Enviando</span><b id="up">0 B/s</b></div>
-  </div>
-  <div class="actions">
-    <button id="open-root">Abrir a pasta GCP-Drive</button>
-    <button id="add" class="primary">Adicionar conta</button>
-  </div>
-</header>
-<p id="notice" class="notice" hidden></p>
-<main>
-  <section id="registration" class="card" aria-labelledby="registration-title" hidden>
-    <h2 id="registration-title">Cadastro no Google</h2>
-    <p id="registration-text"></p>
-    <div class="actions">
-      <a class="button" id="guide" href="guia.html">Ver o passo a passo ilustrado</a>
-      <button id="choose" class="primary">Escolher arquivo</button>
-      <input id="file" type="file" accept=".json,application/json" hidden>
+<div class="app">
+  <header class="top">
+    <div class="brand"><img src="gcp-drive.svg" alt=""><span>GCP-Drive</span></div>
+    <form id="search-form" class="search" role="search"><span data-icon="search"></span><input id="search" type="search" placeholder="Pesquisar no Google Drive" aria-label="Pesquisar no Google Drive"></form>
+    <button id="pause" class="round" title="Pausar sincronização" aria-label="Pausar sincronização"><span data-icon="pause"></span></button>
+    <div class="menu-wrap">
+      <button id="more" class="round" title="Mais opções" aria-label="Mais opções" aria-haspopup="menu" aria-expanded="false"><span data-icon="gear"></span></button>
+      <div id="menu" class="menu" role="menu" hidden>
+        <button role="menuitem" data-page="preferences">Preferências</button>
+        <button role="menuitem" data-page="storage">Espaço usado</button>
+        <button role="menuitem" data-page="notifications">Lista de erros</button>
+        <button role="menuitem" data-page="about">Sobre</button>
+        <button role="menuitem" id="menu-support">Apoie o projeto</button>
+      </div>
     </div>
-  </section>
-  <section id="accounts" aria-label="Contas"></section>
-  <section class="card" aria-labelledby="settings-title">
-    <h2 id="settings-title">Configurações</h2>
-    <form id="settings">
-      <label>Limite de download (KB/s)<input name="DownKBps" type="number" min="0" step="1"><small>0 deixa sem limite.</small></label>
-      <label>Limite de envio (KB/s)<input name="UpKBps" type="number" min="0" step="1"><small>0 deixa sem limite.</small></label>
-      <label>Cache de leitura (GB)<input name="CacheGB" type="number" min="1" step="1"><small>Blocos baixados enquanto um arquivo é aberto.</small></label>
-      <label class="check"><input name="Premap" type="checkbox"> Mapear a conta inteira ao iniciar<small>As pastas abrem na hora, mesmo as que você nunca visitou.</small></label>
-      <div class="actions"><button class="primary">Salvar</button><span id="saved" class="muted" role="status"></span></div>
-    </form>
-    <p class="muted">Arquivos abertos ficam na própria pasta. Para devolver o espaço, clique no arquivo ou na pasta com o botão direito no Explorador de Arquivos e escolha “Liberar espaço”; “Sempre manter neste dispositivo” guarda uma cópia para usar sem internet.</p>
-  </section>
-</main>
+    <button id="gemini" class="round" title="Gemini no Google Drive" aria-label="Gemini no Google Drive"><span data-icon="star"></span></button>
+    <button id="account" class="account"><span data-icon="person"></span><span id="account-name">Contas</span></button>
+  </header>
+  <div class="body">
+    <nav class="rail" aria-label="Seções">
+      <button id="open-drive" class="open-drive"><span data-icon="folder"></span>Abrir pasta do Drive</button>
+      <button class="nav" data-page="home"><span data-icon="home"></span>Início</button>
+      <button class="nav" data-page="activity"><span data-icon="refresh"></span>Atividade</button>
+      <button class="nav" data-page="notifications"><span data-icon="bulb"></span>Notificações</button>
+    </nav>
+    <main id="surface" aria-live="polite"></main>
+  </div>
+</div>
+<p id="notice" class="notice" role="status" hidden></p>
+<input id="registration-file" type="file" accept=".json,application/json" hidden>
+<input id="upload-file" type="file" hidden>
 <dialog id="confirm">
   <form method="dialog">
     <h2 id="confirm-title"></h2>
-    <p id="confirm-text"></p>
-    <div class="actions"><button value="no">Cancelar</button><button value="yes" class="danger" id="confirm-yes"></button></div>
+    <p id="confirm-text" class="muted"></p>
+    <div class="dialog-actions"><button value="no" class="pill small">Cancelar</button><button value="yes" class="primary small" id="confirm-yes">Continuar</button></div>
   </form>
 </dialog>
+<dialog id="support">
+  <h2>Apoie o projeto</h2>
+  <button class="author" data-browse="https://gestaoculturalpro.com.br/">Desenvolvido por Bruno Albertini · Gestão Cultural Pro</button>
+  <div class="support">
+    <div class="support-card">
+      <h3>PIX · Brasil</h3>
+      <img src="support-pix.png" alt="QR Code PIX · Brasil">
+      <span class="muted">Escaneie com o aplicativo do seu banco.</span>
+      <button class="primary small" id="copy-pix">Copiar PIX</button>
+      <details><summary>Ver código PIX</summary><code id="pix-code"></code></details>
+    </div>
+    <div class="support-card">
+      <h3>Stripe · Internacional</h3>
+      <img src="support-stripe.png" alt="QR Code Stripe · Internacional">
+      <span class="muted">Escaneie com a câmera do celular.</span>
+      <button class="link" id="open-stripe">Contribuir via Stripe</button>
+      <button class="link" id="copy-stripe">Copiar link do Stripe</button>
+    </div>
+  </div>
+  <p class="muted">O apoio é voluntário.</p>
+  <form method="dialog" class="dialog-actions"><button class="pill small">Fechar</button></form>
+</dialog>
+<script src="common.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

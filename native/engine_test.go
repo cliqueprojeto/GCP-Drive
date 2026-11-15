@@ -98,6 +98,31 @@ func TestEngine(t *testing.T) {
 	}
 	fake.mu.Unlock()
 
+	// The marks the file managers show: read in full, only in the cloud, kept off-line, unknown.
+	d := &Daemon{mounts: map[string]*Mount{m.a.ID: m}, ctx: context.Background()}
+	projects := filepath.Join(root, "Projetos")
+	if got := d.states(context.Background(), projects); got["relatório.pdf"] != stateLocal || got["nota.txt"] != stateCloud {
+		t.Fatalf("states after a full read: %v", got)
+	}
+	if got := d.states(context.Background(), root)["Planilha.desktop"]; got != stateCloud {
+		t.Fatalf("state of a Google document: %q", got)
+	}
+	if got := d.states(context.Background(), m.path); len(got) != 0 {
+		t.Fatalf("the account's own folder has no marks: %v", got)
+	}
+	if err := m.setPin("D1", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.states(context.Background(), projects); got["nota.txt"] != stateOffline || got["relatório.pdf"] != stateOffline {
+		t.Fatalf("states inside a folder kept off-line: %v", got)
+	}
+	if got := d.states(context.Background(), root)["Projetos"]; got != stateOffline {
+		t.Fatalf("state of the folder kept off-line: %q", got)
+	}
+	if err := m.setPin("D1", false); err != nil {
+		t.Fatal(err)
+	}
+
 	remote := func(name string) (*apiFile, []byte) {
 		fake.mu.Lock()
 		defer fake.mu.Unlock()
