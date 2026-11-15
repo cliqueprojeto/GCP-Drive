@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           useradd --create-home builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
-          runuser -u builder -- env GCP_DRIVE_DOLPHIN=required GOTOOLCHAIN=auto bash -c 'cd "$1/native" && ./package.sh' _ "$GITHUB_WORKSPACE"
+          runuser -u builder -- env GCP_DRIVE_DOLPHIN=required GOTOOLCHAIN=auto bash -c 'cd "$1/native" && bash ./package.sh' _ "$GITHUB_WORKSPACE"
       - name: Install and inspect the Arch package
         shell: bash
         run: |

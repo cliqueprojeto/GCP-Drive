@@ -13,6 +13,8 @@ Cliente do Google Drive para Linux sem rclone. Cada conta aparece como uma pasta
 | Sistema de arquivos | `fs.go`, `mount_linux.go` | go-fuse. Documentos do Google (Docs, Planilhas…) aparecem como atalhos `.desktop` que abrem no navegador. |
 | Serviço e comandos | `main.go` | O serviço atende a interface por um socket local em `$XDG_RUNTIME_DIR`. |
 | Interface | `ui/` | GTK 3 em Python. |
+| Marcas de estado | `states.go`, `dolphin/`, `files/file-manager-extension.py` | `gcp-drive states <pasta>` diz, para cada nome, se está só na nuvem, inteiro no computador, mantido off-line ou com envio pendente. O plugin do Dolphin (KIO 6, `KOverlayIconPlugin`) e a extensão do Nautilus/Nemo mostram isso como emblemas e consultam de novo a cada 3 s as pastas abertas. Pasta ainda não mapeada fica sem marca. |
+| Menu do Explorador | `context_windows.go` | No Windows, o submenu GCP-Drive é gravado em `HKCU\Software\Classes\*\shell\GCPDrive` e `...\Directory\shell\GCPDrive` a cada partida do serviço, limitado à pasta GCP-Drive por `AppliesTo`, e removido na desinstalação. Cada item roda `gcp-drive.exe context-ui <ação> <caminho>`. |
 
 As contas ficam em `~/.config/opengdrive/accounts`, no mesmo formato das versões 0.4.x, e a montagem mantém o tipo `fuse.opengdrive`. Uma atualização a partir da 0.4.x não exige novo login.
 

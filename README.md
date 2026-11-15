@@ -10,14 +10,14 @@ Desenvolvido por **Bruno Albertini | [Gestão Cultural Pro](https://gestaocultur
 
 ## Baixar
 
-[**Baixe a versão 0.5.0 na página de versões**](https://github.com/cliqueprojeto/GCP-Drive/releases/latest).
+[**Baixe a versão 0.5.1 na página de versões**](https://github.com/cliqueprojeto/GCP-Drive/releases/latest).
 
 | Sistema | Arquivo |
 |---|---|
-| Windows 10 e 11 (64 bits) | `GCP-Drive-0.5.0-instalador.exe` |
-| Debian, Ubuntu, Mint | `gcp-drive_0.5.0-3_amd64.deb` |
-| Fedora | `gcp-drive-0.5.0-3.x86_64.rpm` |
-| Arch, Manjaro, BigLinux | `gcp-drive-0.5.0-3-x86_64.pkg.tar.zst` |
+| Windows 10 e 11 (64 bits) | `GCP-Drive-0.5.1-instalador.exe` |
+| Debian, Ubuntu, Mint | `gcp-drive_0.5.1-1_amd64.deb` |
+| Fedora | `gcp-drive-0.5.1-1.x86_64.rpm` |
+| Arch, Manjaro, BigLinux | `gcp-drive-0.5.1-1-x86_64.pkg.tar.zst` |
 
 Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 
@@ -37,27 +37,31 @@ Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 - **Documentos, Planilhas e Apresentações Google** aparecem como atalhos que abrem no navegador.
 - **Painel** com velocidade de download e de envio, fila de envio, progresso do mapa, uso do cache, espaço usado no Google e atividade recente.
 - **Limites de velocidade** de download e de envio; abrir arquivos tem prioridade sobre envios e cópias off-line.
+- **Menu GCP-Drive no botão direito** do gerenciador de arquivos: pedir ao Gemini, abrir na nuvem, copiar link, compartilhar, adicionar atalho a Meu Drive, manter off-line, abrir a pasta e enviar arquivo para uma pasta.
+- **Compartilhamento** numa janela própria: convidar pessoas ou grupos por e-mail, escolher a permissão, ver quem tem acesso e copiar o link.
+- **Marcas de estado** ao lado de cada arquivo e pasta: só na nuvem, neste computador, mantido off-line ou enviando.
+- **Busca** nos arquivos da conta e **envio de arquivos** pelo painel.
 - **Pausar e retomar** cada conta. **Início junto com o sistema** e ícone na área de notificação.
 - **Sem servidores do GCP-Drive.** O aplicativo conversa só com o Google; os seus arquivos e logins não passam por nenhum outro lugar.
 
 ### Só no Linux
 
 - Pasta montada em `~/GCP-Drive/<e-mail>`, usável por qualquer programa e pelo terminal.
-- Menu do botão direito no Dolphin, Nautilus e Nemo: manter off-line, copiar link, compartilhar, abrir na nuvem, adicionar atalho a Meu Drive e pedir ao Gemini.
-- Compartilhamento pelo painel: convidar pessoas por e-mail, escolher a permissão e copiar o link.
-- Busca nos arquivos da conta e envio de arquivos pelo painel.
+- Menu e marcas de estado no Dolphin (KDE Plasma 6), Nautilus e Nemo. As marcas do Dolphin vêm de um plugin do KDE Frameworks 6 instalado com o pacote; em distribuições com Qt mais antigo que o da compilação, o Dolphin não carrega o plugin e as pastas funcionam sem as marcas.
 
 ### Só no Windows
 
 - Integração com o Explorador de Arquivos: a conta aparece no painel de navegação, com os ícones de estado do Windows (na nuvem, neste dispositivo, sincronizando).
 - **Sempre manter neste dispositivo** e **Liberar espaço** no botão direito, como no OneDrive.
+- O submenu **GCP-Drive** aparece só para itens dentro da pasta GCP-Drive. No Windows 11 ele pode ficar em **Mostrar mais opções**, conforme a versão do Windows.
+- Painel com o mesmo desenho do Linux: início, atividade, notificações, contas, preferências, espaço usado e apoio ao projeto.
 - Instalação só para o seu usuário, sem pedir senha de administrador, e desinstalação limpa em **Aplicativos instalados**.
 
 ## Como instalar
 
 ### Windows
 
-1. Baixe `GCP-Drive-0.5.0-instalador.exe`.
+1. Baixe `GCP-Drive-0.5.1-instalador.exe`.
 2. O navegador pode avisar que o arquivo "não é baixado com frequência". Escolha **Manter**.
 3. Ao abrir o instalador, o Windows pode mostrar a tela azul **"O Windows protegeu o computador"**. Clique em **Mais informações** e depois em **Executar assim mesmo**.
 4. Siga o instalador. O GCP-Drive abre sozinho e passa a iniciar junto com o Windows.
@@ -69,15 +73,15 @@ O aviso do passo 3 aparece porque o instalador não tem assinatura digital, um c
 Baixe o pacote da sua distribuição e, na pasta do download, instale:
 
 ```sh
-sudo apt install ./gcp-drive_0.5.0-3_amd64.deb
+sudo apt install ./gcp-drive_0.5.1-1_amd64.deb
 ```
 
 ```sh
-sudo dnf install ./gcp-drive-0.5.0-3.x86_64.rpm
+sudo dnf install ./gcp-drive-0.5.1-1.x86_64.rpm
 ```
 
 ```sh
-sudo pacman -U ./gcp-drive-0.5.0-3-x86_64.pkg.tar.zst
+sudo pacman -U ./gcp-drive-0.5.1-1-x86_64.pkg.tar.zst
 ```
 
 Use só a linha do seu sistema: a primeira é para Debian, Ubuntu e Mint; a segunda, para Fedora; a terceira, para Arch, Manjaro e BigLinux. Depois abra **GCP-Drive** no menu de aplicativos, categoria Internet.
