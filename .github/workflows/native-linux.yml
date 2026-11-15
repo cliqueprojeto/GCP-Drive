@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Anexar os pacotes a este rascunho de versão já criado (ex. v0.5.1)
+        description: Anexar os pacotes a este rascunho de versão já criado (ex. v0.5.2)
         type: string
         default: ''
 permissions:

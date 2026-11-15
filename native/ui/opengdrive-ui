@@ -904,22 +904,20 @@ class Dashboard(Gtk.Application):
         communicate(["version"], installed)
 
     def restart_service(self):
-        def start():
-            self.daemon = None
+        """Stops the old service and starts this panel again from the installed files, which starts the new service."""
+        def again():
             try:
-                self.start_daemon()
+                os.execv(sys.executable, [sys.executable, os.path.realpath(sys.argv[0])])
             except OSError as error:
-                startup_error("Não foi possível reiniciar a montagem das unidades.", error)
-                message(self.window, "Reiniciar o serviço", "O serviço não iniciou. Saia da sessão do sistema e entre de novo.", True)
-                return GLib.SOURCE_REMOVE
-            GLib.timeout_add_seconds(3, lambda: self.load_settings() or GLib.SOURCE_REMOVE)
+                startup_error("Não foi possível reabrir o painel atualizado.", error)
+                message(self.window, "Reiniciar o serviço", "Saia da sessão do sistema e entre de novo para concluir a atualização.", True)
             return GLib.SOURCE_REMOVE
 
         def stopped(_, error):
             if error:
                 message(self.window, "Reiniciar o serviço", error, True)
             else:
-                GLib.timeout_add_seconds(2, start)
+                GLib.timeout_add_seconds(2, again)
 
         communicate(["quit"], stopped)
 

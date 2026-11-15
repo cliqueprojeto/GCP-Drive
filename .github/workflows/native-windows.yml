@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
       release_tag:
-        description: Anexar o instalador a este rascunho de versão já criado (ex. v0.5.1)
+        description: Anexar o instalador a este rascunho de versão já criado (ex. v0.5.2)
         type: string
         default: ''
 permissions:

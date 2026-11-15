@@ -10,14 +10,14 @@ Desenvolvido por **Bruno Albertini | [Gestão Cultural Pro](https://gestaocultur
 
 ## Baixar
 
-[**Baixe a versão 0.5.1 na página de versões**](https://github.com/cliqueprojeto/GCP-Drive/releases/latest).
+[**Baixe a versão 0.5.2 na página de versões**](https://github.com/cliqueprojeto/GCP-Drive/releases/latest).
 
 | Sistema | Arquivo |
 |---|---|
-| Windows 10 e 11 (64 bits) | `GCP-Drive-0.5.1-instalador.exe` |
-| Debian, Ubuntu, Mint | `gcp-drive_0.5.1-1_amd64.deb` |
-| Fedora | `gcp-drive-0.5.1-1.x86_64.rpm` |
-| Arch, Manjaro, BigLinux | `gcp-drive-0.5.1-1-x86_64.pkg.tar.zst` |
+| Windows 10 e 11 (64 bits) | `GCP-Drive-0.5.2-instalador.exe` |
+| Debian, Ubuntu, Mint | `gcp-drive_0.5.2-1_amd64.deb` |
+| Fedora | `gcp-drive-0.5.2-1.x86_64.rpm` |
+| Arch, Manjaro, BigLinux | `gcp-drive-0.5.2-1-x86_64.pkg.tar.zst` |
 
 Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 
@@ -61,7 +61,7 @@ Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 
 ### Windows
 
-1. Baixe `GCP-Drive-0.5.1-instalador.exe`.
+1. Baixe `GCP-Drive-0.5.2-instalador.exe`.
 2. O navegador pode avisar que o arquivo "não é baixado com frequência". Escolha **Manter**.
 3. Ao abrir o instalador, o Windows pode mostrar a tela azul **"O Windows protegeu o computador"**. Clique em **Mais informações** e depois em **Executar assim mesmo**.
 4. Siga o instalador. O GCP-Drive abre sozinho e passa a iniciar junto com o Windows.
@@ -73,15 +73,15 @@ O aviso do passo 3 aparece porque o instalador não tem assinatura digital, um c
 Baixe o pacote da sua distribuição e, na pasta do download, instale:
 
 ```sh
-sudo apt install ./gcp-drive_0.5.1-1_amd64.deb
+sudo apt install ./gcp-drive_0.5.2-1_amd64.deb
 ```
 
 ```sh
-sudo dnf install ./gcp-drive-0.5.1-1.x86_64.rpm
+sudo dnf install ./gcp-drive-0.5.2-1.x86_64.rpm
 ```
 
 ```sh
-sudo pacman -U ./gcp-drive-0.5.1-1-x86_64.pkg.tar.zst
+sudo pacman -U ./gcp-drive-0.5.2-1-x86_64.pkg.tar.zst
 ```
 
 Use só a linha do seu sistema: a primeira é para Debian, Ubuntu e Mint; a segunda, para Fedora; a terceira, para Arch, Manjaro e BigLinux. Depois abra **GCP-Drive** no menu de aplicativos, categoria Internet.

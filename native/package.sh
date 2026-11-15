@@ -48,6 +48,8 @@ install -Dm644 "$here/files/opengdrive.desktop" "$stage/etc/xdg/autostart/opengd
 install -Dm644 "$here/files/gcp-drive.menu" "$stage/etc/xdg/menus/applications-merged/gcp-drive.menu"
 
 summary="Google Drive no Linux com streaming, cópias off-line e várias contas."
+# A package update replaces the files but not the service already running in each session.
+updated='echo "GCP-Drive atualizado. Para concluir, abra o painel do GCP-Drive e aceite reiniciar o serviço, ou saia da sessão e entre de novo."'
 
 # Each distribution looks for Qt plugins in its own directory; the plugin is linked from there.
 stage_for() {
@@ -77,8 +79,10 @@ optdepends=('kio: marcas de estado nas pastas do Dolphin' 'kde-cli-tools: resolv
 conflicts=('opengdrive' 'gcp-drive-bin')
 replaces=('opengdrive' 'gcp-drive-bin')
 options=('!strip' '!debug')
+install=gcp-drive.install
 package() { cp -a "$work/stage-arch/." "\$pkgdir/"; }
 PKG
+printf 'post_upgrade() {\n  %s\n}\n' "$updated" > "$work/arch/gcp-drive.install"
 (cd "$work/arch" && PKGDEST="$out" PKGEXT=.pkg.tar.zst makepkg --nodeps --force --noconfirm >/dev/null)
 
 # Debian and Ubuntu
@@ -104,8 +108,10 @@ Description: $summary
 CTL
 (cd "$work/stage-deb" && find etc -type f | sed 's|^|/|') > "$deb/control/conffiles"
 (cd "$work/stage-deb" && find usr etc -type f -exec md5sum {} + ) > "$deb/control/md5sums"
+printf '#!/bin/sh\nset -e\n[ "$1" = configure ] && [ -n "$2" ] && %s\nexit 0\n' "$updated" > "$deb/control/postinst"
+chmod 755 "$deb/control/postinst"
 echo 2.0 > "$deb/debian-binary"
-fakeroot sh -c "cd '$deb/control' && tar --owner=0 --group=0 -cJf ../control.tar.xz ./control ./conffiles ./md5sums && cd '$work/stage-deb' && tar --owner=0 --group=0 -cJf '$deb/data.tar.xz' ./usr ./etc"
+fakeroot sh -c "cd '$deb/control' && tar --owner=0 --group=0 -cJf ../control.tar.xz ./control ./conffiles ./md5sums ./postinst && cd '$work/stage-deb' && tar --owner=0 --group=0 -cJf '$deb/data.tar.xz' ./usr ./etc"
 rm -f "$out/gcp-drive_${version}-${release}_amd64.deb"
 (cd "$deb" && ar rc "$out/gcp-drive_${version}-${release}_amd64.deb" debian-binary control.tar.xz data.tar.xz)
 
@@ -126,6 +132,8 @@ Obsoletes: opengdrive < $version
 %description
 Monta cada conta do Google Drive como uma pasta do computador. Os arquivos
 são baixados sob demanda e ficam em cache local para abrir na hora.
+%post
+[ "\$1" -gt 1 ] && $updated || :
 %install
 cp -a "$work/stage-rpm/." "%{buildroot}/"
 %files
