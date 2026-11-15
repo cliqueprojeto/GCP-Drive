@@ -264,6 +264,7 @@ class Dashboard(Gtk.Application):
         self.login_pending = False
         self.settings = None
         self.version = ""
+        self.update_asked = False
         self.live = {}
 
     def do_command_line(self, command):
@@ -884,11 +885,50 @@ class Dashboard(Gtk.Application):
         row.pack_start(button("Cadastro no Google", self.registration, "pill"), False, False, 0)
         box.pack_start(row, False, False, 0)
 
+    def check_update(self):
+        """After a package update the old service keeps running; offers to restart it into the new version."""
+        if self.update_asked or not self.window or not self.version:
+            return
+
+        def installed(out, _):
+            new = (out or "").strip().removeprefix(NAME).strip()
+            if self.update_asked or not self.window or not new or new == self.version:
+                return
+            self.update_asked = True
+            if confirm(self.window, f"O {NAME} foi atualizado para a versão {new}",
+                       f"O serviço em execução ainda é o da versão {self.version}. Reiniciar agora para concluir a atualização?\n\n"
+                       "As pastas das contas ficam indisponíveis por alguns segundos. Antes, salve e feche os arquivos "
+                       "do GCP-Drive abertos em outros programas. Envios pendentes continuam depois."):
+                self.restart_service()
+
+        communicate(["version"], installed)
+
+    def restart_service(self):
+        def start():
+            self.daemon = None
+            try:
+                self.start_daemon()
+            except OSError as error:
+                startup_error("Não foi possível reiniciar a montagem das unidades.", error)
+                message(self.window, "Reiniciar o serviço", "O serviço não iniciou. Saia da sessão do sistema e entre de novo.", True)
+                return GLib.SOURCE_REMOVE
+            GLib.timeout_add_seconds(3, lambda: self.load_settings() or GLib.SOURCE_REMOVE)
+            return GLib.SOURCE_REMOVE
+
+        def stopped(_, error):
+            if error:
+                message(self.window, "Reiniciar o serviço", error, True)
+            else:
+                GLib.timeout_add_seconds(2, start)
+
+        communicate(["quit"], stopped)
+
     def load_settings(self):
         def receive(out, err):
             if not err:
                 self.settings = json.loads(out)
                 self.version = self.settings.get("Version", self.version)
+                self.check_update()
                 if self.window and self.page in ("preferences", "about"):
                     self.render()
         communicate(["settings"], receive)
