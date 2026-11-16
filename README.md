@@ -4,9 +4,9 @@
 
 Desenvolvido por **Bruno Albertini | [Gestão Cultural Pro](https://gestaoculturalpro.com.br)**.
 
-![Painel do GCP-Drive no Windows, com dados de exemplo](docs/images/painel-windows-exemplo.png)
+![Painel do GCP-Drive 0.5.2 no Windows, página Início, com dados de exemplo](docs/images/painel-windows-inicio.png)
 
-*Painel do Windows com contas e arquivos de exemplo.*
+*Painel do Windows (versão 0.5.2), com conta e arquivos de exemplo.*
 
 ## Baixar
 
@@ -57,6 +57,12 @@ Cada versão traz os códigos SHA-256 para conferir os arquivos baixados.
 - Painel com o mesmo desenho do Linux: início, atividade, notificações, contas, preferências, espaço usado e apoio ao projeto.
 - Instalação só para o seu usuário, sem pedir senha de administrador, e desinstalação limpa em **Aplicativos instalados**.
 
+| Compartilhar pelo menu GCP-Drive | Preferências |
+|---|---|
+| ![Janela de compartilhamento com pessoas de exemplo](docs/images/janela-compartilhar.png) | ![Preferências do painel do Windows](docs/images/painel-windows-preferencias.png) |
+
+*Telas do painel do Windows com dados de exemplo.*
+
 ## Como instalar
 
 ### Windows
@@ -85,6 +91,11 @@ sudo pacman -U ./gcp-drive-0.5.2-1-x86_64.pkg.tar.zst
 ```
 
 Use só a linha do seu sistema: a primeira é para Debian, Ubuntu e Mint; a segunda, para Fedora; a terceira, para Arch, Manjaro e BigLinux. Depois abra **GCP-Drive** no menu de aplicativos, categoria Internet.
+
+### Atualizar
+
+- **Windows:** rode o instalador novo por cima. Ele fecha o GCP-Drive, troca os arquivos e o abre de novo.
+- **Linux:** instale o pacote novo por cima. A partir da 0.5.2, o painel percebe que o serviço ainda é o antigo e oferece reiniciá-lo (salve e feche antes os arquivos abertos). **Quem vem da 0.5.0 ou da 0.5.1** precisa, só desta vez, sair da sessão e entrar de novo, ou reiniciar o computador.
 
 ## Conectar a sua conta do Google
 
@@ -117,8 +128,9 @@ O "desenvolvedor" citado no aviso é o e-mail de quem criou o cadastro, ou seja,
 
 O registro completo, com o que foi e o que não foi executado, está em [docs/VALIDACAO.md](docs/VALIDACAO.md). Em resumo:
 
-- **Linux:** usado no BigLinux/KDE com contas reais (leitura, gravação e instalação do pacote `.pkg.tar.zst`). Os pacotes `.deb` e `.rpm` foram conferidos por dentro, mas ainda não instalados no Debian/Ubuntu e no Fedora.
-- **Windows:** os testes automáticos rodam no Windows Server do GitHub contra um Google Drive simulado, incluindo instalar, atualizar e desinstalar. A homologação numa área de trabalho real, com contas reais, ainda está em andamento.
+- **Linux:** usado no BigLinux/KDE com contas reais (leitura, gravação e instalação do pacote `.pkg.tar.zst`). Os pacotes `.deb` e `.rpm` foram conferidos por dentro, mas ainda não instalados no Debian/Ubuntu e no Fedora. A janela que oferece o reinício depois de uma atualização (0.5.2) ainda não foi vista numa área de trabalho.
+- **Windows:** os testes automáticos rodam no Windows Server do GitHub contra um Google Drive simulado, incluindo instalar, atualizar e desinstalar. Num Windows 11 em português, com as contas reais do autor, o instalador 0.5.1 foi aplicado por cima da 0.5.0, o submenu GCP-Drive ficou limitado à pasta GCP-Drive e a ação "Copiar link" funcionou numa pasta real. Ainda faltam: ver o submenu pelo botão direito no Explorador, as demais ações do menu com contas reais, o painel aberto pelo ícone ao lado do relógio e o Windows 10.
+- **Capturas:** as telas desta página foram geradas a partir do painel desta versão, num navegador, com dados de exemplo; não são fotos de uma área de trabalho do Windows.
 
 É uma versão nova: comece com arquivos que tenham cópia e [relate problemas](https://github.com/cliqueprojeto/GCP-Drive/issues), sem enviar dados pessoais.
 
